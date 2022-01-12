@@ -1,0 +1,35 @@
+#!/bin/bash
+if [ ! -f "install_dependencies" ]; then
+    echo "Wrong working dir! Execute when in root of Project!"
+    exit 1
+fi
+
+cd lib
+if [ ! -d "fftw3" ]; then
+    #download fftw3 from http://www.fftw.org/
+    echo "downloading fftw3 now..."
+    mkdir fftw3
+    cd fftw3
+    wget http://www.fftw.org/fftw-3.3.10.tar.gz
+    tar -xf fftw-3.3.10.tar.gz --strip 1
+    rm fftw-3.3.10.tar.gz
+    cd ..
+fi
+
+if [ ! -d "rpi_ws281x" ]; then 
+    #get specific commit from archife of https://github.com/jgarff/rpi_ws281x
+    echo "downloading ws281x library now..."
+    wget https://github.com/jgarff/rpi_ws281x/archive/ee7522e3b053950af33bc7e4364742cd3aeaf594.zip
+    unzip ee7522e3b053950af33bc7e4364742cd3aeaf594.zip
+    mv rpi_ws281x-ee7522e3b053950af33bc7e4364742cd3aeaf594/ rpi_ws281x
+    rm ee7522e3b053950af33bc7e4364742cd3aeaf594.zip
+fi
+
+if [ ! -d "portaudio" ]; then
+    #download stable release 19.7 from portaudio (http://files.portaudio.com/)
+    echo "downloading portaudio now..."
+    wget http://files.portaudio.com/archives/pa_stable_v190700_20210406.tgz
+    tar -xf pa_stable_v190700_20210406.tgz
+    rm pa_stable_v190700_20210406.tgz
+fi
+cd ..
