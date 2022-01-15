@@ -4,16 +4,19 @@
 
 #include <portaudio.h>
 #include <fftw3.h>
-
 #include <string>
+
+#include <signal.h>
 
 /* #define SAMPLE_RATE  (17932) // Test failure to open with this value. */
 #define SAMPLE_RATE (44100)
 #define FRAMES_PER_BUFFER (512)
-#define NUM_SECONDS (0.1f)
+#define NUM_SECONDS (.5)
 #define NUM_CHANNELS (2)
 /* #define DITHER_FLAG     (paDitherOff) */
 #define DITHER_FLAG (0)
+
+#define ITERATION_SIZE (1)
 
 #define WRITE_TO_FILE (0)
 
@@ -52,6 +55,14 @@ typedef struct
     int maxFrameIndex;
     SAMPLE *recordedSamples;
 } paTestData;
+
+volatile sig_atomic_t stop;
+
+void inthand(int signum)
+{
+    stop = 1;
+    printf("Programm is beeing shutdown, please await the last iteration...\n");
+}
 
 /* This routine will be called by the PortAudio engine when audio is needed.
 ** It may be called at interrupt level on some machines so don't do anything
@@ -166,24 +177,25 @@ static int playCallback(const void *inputBuffer, void *outputBuffer, unsigned lo
     return finished;
 }
 
-int calculateNote(int frequency)
+int calculateNote(double frequency)
 {
-    if (noteFrequencies[0] == 0) //check if array is already initialized
+    if (noteFrequencies[0] == 0) // check if array is already initialized
     {
-        //calculate NoteFrequencies
+        // calculate NoteFrequencies
         float currFreq = 16.35f;
         for (size_t i = 0; i < OCTAVES; i++)
         {
             for (size_t j = 0; j < NOTES; j++)
             {
                 noteFrequencies[j + i * NOTES] = currFreq;
-                //printf("%f  %d  %f\n", currFreq, j+i*NOTES, pow(2.f,1.f/12.f));
+                // printf("%f  %d  %f\n", currFreq, j+i*NOTES, pow(2.f,1.f/12.f));
                 currFreq = currFreq * pow(2.f, 1.f / 12.f);
             }
         }
     }
-
-    if (frequency < 15.f || frequency > 8000)
+    printf("Frequency peak at: %g\n", frequency);
+    //filter out everything below 55, because it's the basic noise
+    if (frequency < 55. || frequency > 8000)
         return -1;
     int result = 0;
 
@@ -205,9 +217,9 @@ int calculateNote(int frequency)
 void printNote(int note)
 {
     if (note != -1)
-        printf("The Note detected was: %s%d", noteNames[note % 12].c_str(), note / 12);
+        printf("The Note detected was: %s%d\n", noteNames[note % 12].c_str(), note / 12);
     else
-        printf("No Note recognized!");
+        printf("No Note recognized!\n");
 }
 
 /*******************************************************************/
@@ -226,20 +238,22 @@ int main(void)
     double average;
     double analyzeMax = 0;
     int highestFrequency = 0;
-
-    printf("patest_record.c\n");
-    fflush(stdout);
-
+    double highestPeak = 0;
+    int highestFrequencyIndex = 0;
+    int stepSize;
     data.maxFrameIndex = totalFrames = NUM_SECONDS * SAMPLE_RATE; /* Record for a few seconds. */
-    data.frameIndex = 0;
     numSamples = totalFrames * NUM_CHANNELS;
     numBytes = numSamples * sizeof(SAMPLE);
     data.recordedSamples = (SAMPLE *)malloc(numBytes); /* From now on, recordedSamples is initialised. */
-    fftw_complex in[numSamples];
-    fftw_complex out[numSamples];
-    printf("Hallo\n");
+    stepSize = numSamples / ITERATION_SIZE;
+    double results[stepSize] = {0};
+
     fflush(stdout);
-    fftw_plan plan = fftw_plan_dft_1d(numSamples, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+
+    fftw_complex in[stepSize];
+    fftw_complex out[stepSize];
+    fflush(stdout);
+    fftw_plan plan = fftw_plan_dft_1d(stepSize, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
 
     if (data.recordedSamples == NULL)
     {
@@ -247,104 +261,125 @@ int main(void)
         goto done;
     }
 
-    for (i = 0; i < numSamples; i++)
-        data.recordedSamples[i] = 0;
-
-    err = Pa_Initialize();
-
-    if (err != paNoError)
-        goto done;
-
-    inputParameters.device = Pa_GetDefaultInputDevice(); /* default input device */
-
-    if (inputParameters.device == paNoDevice)
+    // while loop until ctrl+c is pressed
+    signal(SIGINT, inthand);
+    while (!stop)
     {
-        fprintf(stderr, "Error: No default input device.\n");
-        goto done;
-    }
+        data.frameIndex = 0;
+        for (i = 0; i < numSamples; i++)
+            data.recordedSamples[i] = 0;
+        // re route stderr to hide ALSA errors that cannot easily be disabled
+        // see: https://stackoverflow.com/questions/24778998/how-to-disable-or-re-route-alsa-lib-logging
+        freopen("/dev/null", "w", stderr);
+        err = Pa_Initialize();
+        freopen("/dev/tty", "w", stderr);
 
-    inputParameters.channelCount = 2; /* stereo input */
-    inputParameters.sampleFormat = PA_SAMPLE_TYPE;
-    inputParameters.suggestedLatency = Pa_GetDeviceInfo(inputParameters.device)->defaultLowInputLatency;
-    inputParameters.hostApiSpecificStreamInfo = NULL;
+        if (err != paNoError)
+            goto done;
 
-    /* Record some audio. -------------------------------------------- */
-    err = Pa_OpenStream(&stream, &inputParameters, NULL, SAMPLE_RATE, FRAMES_PER_BUFFER, paClipOff, recordCallback, &data);
+        inputParameters.device = Pa_GetDefaultInputDevice(); /* default input device */
 
-    if (err != paNoError)
-        goto done;
+        if (inputParameters.device == paNoDevice)
+        {
+            fprintf(stderr, "Error: No default input device.\n");
+            goto done;
+        }
 
-    err = Pa_StartStream(stream);
-    if (err != paNoError)
-        goto done;
+        inputParameters.channelCount = 2; /* stereo input */
+        inputParameters.sampleFormat = PA_SAMPLE_TYPE;
+        inputParameters.suggestedLatency = Pa_GetDeviceInfo(inputParameters.device)->defaultLowInputLatency;
+        inputParameters.hostApiSpecificStreamInfo = NULL;
 
-    printf("\n=== Now recording!! Please speak into the microphone. ===\n");
-    fflush(stdout);
+        /* Record some audio. -------------------------------------------- */
+        err = Pa_OpenStream(&stream, &inputParameters, NULL, SAMPLE_RATE, FRAMES_PER_BUFFER, paClipOff, recordCallback, &data);
 
-    while ((err = Pa_IsStreamActive(stream)) == 1)
-    {
-        Pa_Sleep(1000);
-        printf("index = %d\n", data.frameIndex);
+        if (err != paNoError)
+            goto done;
+
+        err = Pa_StartStream(stream);
+        if (err != paNoError)
+            goto done;
+
+        // printf("=== Now recording!! ...");
         fflush(stdout);
-    }
 
-    if (err < 0)
-        goto done;
-
-    err = Pa_CloseStream(stream);
-
-    if (err != paNoError)
-        goto done;
-
-    /* Measure maximum peak amplitude. */
-    max = 0;
-    average = 0.0;
-
-    for (i = 0; i < numSamples; i++)
-    {
-        val = data.recordedSamples[i];
-
-        if (val < 0)
-            val = -val; /* ABS */
-
-        if (val > max)
+        while ((err = Pa_IsStreamActive(stream)) == 1)
         {
-            max = val;
+            Pa_Sleep(1000);
+            // printf("index = %d\n", data.frameIndex);
+            fflush(stdout);
         }
 
-        average += val;
+        if (err < 0)
+            goto done;
 
-        in[i][0] = data.recordedSamples[i];
-        in[i][1] = 0;
-    }
+        err = Pa_CloseStream(stream);
+        // printf("  Done recording!! ===\n");
+        if (err != paNoError)
+            goto done;
 
-    fftw_execute(plan);
+        /* Measure maximum peak amplitude. */
+        max = 0;
+        average = 0.0;
+        // for (int i = 0; i < numSamples; i++)
+        // {
+        //    printf("%g\n", data.recordedSamples[i]);
+        // }
 
-    printf("=================================");
-    printf("fftw");
-    for (i = 0; i < numSamples/2; i++)
-    {
-        double mag = sqrt(out[i][0] * out[i][0] + out[i][1] * out[i][1]);
-
-        if (analyzeMax < mag)
+        for (int n = 1; n <= ITERATION_SIZE; n++)
         {
-            analyzeMax = mag;
-            highestFrequency = i;
+            for (i = stepSize * (n - 1); i < stepSize * n; i++)
+            {
+                val = data.recordedSamples[i];
+                if (val < 0)
+                    val = -val; /* ABS */
+
+                if (val > max)
+                {
+                    max = val;
+                }
+
+                average += val;
+
+                in[i - (stepSize * (n - 1))][0] = data.recordedSamples[i];
+                in[i - (stepSize * (n - 1))][1] = 0;
+            }
+
+            fftw_execute(plan);
+
+            for (i = 0; i < stepSize; i++)
+            {
+                double mag = sqrt(out[i][0] * out[i][0] + out[i][1] * out[i][1]);
+                results[i] += mag;
+            }
         }
-        printf("%g\n", mag);
+        // printf("\n");
+
+        // printf("=================================\n");
+        // printf("fftw\n");
+        highestFrequency = 0;
+        highestFrequencyIndex = 0;
+        highestPeak = 0;
+        for (i = 0; i < stepSize / 2; i++)
+        {
+            results[i] = results[i] / ITERATION_SIZE;
+            if (results[i] > highestPeak){
+                highestPeak = results[i];
+                highestFrequencyIndex = i;
+            }
+            // printf("%g\n", results[i]);
+        }
+        // printf("=================================\n");
+
+        highestFrequency = highestFrequencyIndex / NUM_SECONDS * ITERATION_SIZE;
+
+        printNote(calculateNote(highestFrequency));
+        printf("FrequencyValue: %g\n",highestPeak);
+        for (int i = 0; i < stepSize; i++)
+        {
+            results[i] = 0;
+        }
     }
-
-    average = average / (double)numSamples;
-
-    printf("=================================");
-
-    printf("sample max amplitude = %d\n", max);
-    printf("sample average = %lf\n", average);
-    printf("\n\n");
-    if (NUM_SECONDS < 1)
-        highestFrequency = highestFrequency / NUM_SECONDS;
-    printNote(calculateNote(highestFrequency));
-
 done:
     Pa_Terminate();
 
