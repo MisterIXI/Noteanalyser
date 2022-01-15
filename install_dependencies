@@ -21,7 +21,7 @@ if [ ! -d "fftw3" ]; then
     rm fftw-3.3.10.tar.gz
     cd ..
 fi
-if [ ! -f "/usr/local/include/fftw3.h "]; then
+if [ ! -f "/usr/local/include/fftw3.h" ]; then
     echo "installing fftw3 now..."
     cd fftw3
     ./configure
@@ -73,7 +73,7 @@ if [ ! -d "WiringPi" ]; then
     unzip 5de0d8f5739ccc00ab761639a7e8d3d1696a480a.zip
     mv WiringPi-5de0d8f5739ccc00ab761639a7e8d3d1696a480a/ WiringPi/
 fi
-if [ ! -f "/usr/local/include/wiringPi.h"]
+if [ ! -f "/usr/local/include/wiringPi.h" ]; then
     #use automatic script to install wiringPi
     cd WiringPi
     ./build
