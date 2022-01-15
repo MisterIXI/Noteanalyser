@@ -199,7 +199,7 @@ int calculateNote(double frequency)
             }
         }
     }
-    printf("Frequency peak at: %g\n", frequency);
+    
     // filter out everything below 55, because it's the basic noise
     if (frequency < 55. || frequency > 8000)
         return -1;
@@ -396,8 +396,11 @@ int main(int argc, char *argv[])
         // printf("=================================\n");
 
         highestFrequency = highestFrequencyIndex / NUM_SECONDS * ITERATION_SIZE;
-
-        printNote(calculateNote(highestFrequency));
+        printf("Frequency peak at: %d\n", highestFrequency);
+        if (highestPeak > 1)
+            printNote(calculateNote(highestFrequency));
+        else
+            printNote(-1);
         printf("FrequencyValue: %g\n", highestPeak);
         for (int i = 0; i < stepSize; i++)
         {
