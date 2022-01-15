@@ -1,12 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <sstream>
+#include <signal.h>
+#include <algorithm>
 
 #include <portaudio.h>
 #include <fftw3.h>
 #include <string>
 
-#include <signal.h>
+#include "i2cLEDScreen.h"
 
 /* #define SAMPLE_RATE  (17932) // Test failure to open with this value. */
 #define SAMPLE_RATE (44100)
@@ -45,6 +48,9 @@ typedef unsigned char SAMPLE;
 
 #define OCTAVES 9
 #define NOTES 12
+
+// default without LCD
+bool useScreen = 0;
 
 float noteFrequencies[OCTAVES * NOTES] = {0};
 std::string noteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"};
@@ -194,7 +200,7 @@ int calculateNote(double frequency)
         }
     }
     printf("Frequency peak at: %g\n", frequency);
-    //filter out everything below 55, because it's the basic noise
+    // filter out everything below 55, because it's the basic noise
     if (frequency < 55. || frequency > 8000)
         return -1;
     int result = 0;
@@ -216,15 +222,25 @@ int calculateNote(double frequency)
 
 void printNote(int note)
 {
+    std::stringstream output;
     if (note != -1)
-        printf("The Note detected was: %s%d\n", noteNames[note % 12].c_str(), note / 12);
+        output << "The Note detected was: " << noteNames[note % 12].c_str() << note / 12;
     else
-        printf("No Note recognized!\n");
+        output << "No Note recognized!";
+
+    printf("%s\n", output.str().c_str());
+    if (useScreen)
+        printToScreen(output.str(), 1);
+}
+
+bool cmdOptionExists(char **begin, char **end, const std::string &option)
+{
+    return std::find(begin, end, option) != end;
 }
 
 /*******************************************************************/
-int main(void);
-int main(void)
+int main(int argc, char *argv[]);
+int main(int argc, char *argv[])
 {
     PaStreamParameters inputParameters, outputParameters;
     PaStream *stream;
@@ -248,6 +264,13 @@ int main(void)
     stepSize = numSamples / ITERATION_SIZE;
     double results[stepSize] = {0};
 
+    if (cmdOptionExists(argv, argv + argc, "-L"))
+    {
+        useScreen = 1;
+        init_i2c_screen();
+    }
+    else
+        printf("Call with \"-L\" to use i2cLCD\n");
     fflush(stdout);
 
     fftw_complex in[stepSize];
@@ -363,7 +386,8 @@ int main(void)
         for (i = 0; i < stepSize / 2; i++)
         {
             results[i] = results[i] / ITERATION_SIZE;
-            if (results[i] > highestPeak){
+            if (results[i] > highestPeak)
+            {
                 highestPeak = results[i];
                 highestFrequencyIndex = i;
             }
@@ -374,7 +398,7 @@ int main(void)
         highestFrequency = highestFrequencyIndex / NUM_SECONDS * ITERATION_SIZE;
 
         printNote(calculateNote(highestFrequency));
-        printf("FrequencyValue: %g\n",highestPeak);
+        printf("FrequencyValue: %g\n", highestPeak);
         for (int i = 0; i < stepSize; i++)
         {
             results[i] = 0;
