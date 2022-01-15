@@ -1,4 +1,5 @@
 .vscode
 build
 lib
-NoteAnalyser.out
+NoteAnalyser
+OUTPUT
