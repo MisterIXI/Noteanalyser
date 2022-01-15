@@ -8,6 +8,9 @@ if [ "$EUID" -ne 0 ]; then
     echo "Please run as root for the \"make install\" sections"
     exit 1
 fi
+if [ ! -d "lib" ]; then
+    mkdir lib
+fi
 cd lib
 
 #FFTW3.3.10
