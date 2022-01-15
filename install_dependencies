@@ -8,8 +8,9 @@ if [ "$EUID" -ne 0 ]; then
     echo "Please run as root for the \"make install\" sections"
     exit 1
 fi
-
 cd lib
+
+#FFTW3.3.10
 if [ ! -d "fftw3" ]; then
     #download fftw3 from http://www.fftw.org/
     echo "downloading fftw3 now..."
@@ -29,7 +30,7 @@ if [ ! -f "/usr/local/include/fftw3.h "]; then
     cd ..
 fi
 
-
+#WS281x
 if [ ! -d "rpi_ws281x" ]; then 
     #get specific commit from archife of https://github.com/jgarff/rpi_ws281x
     echo "downloading ws281x library now..."
@@ -48,6 +49,7 @@ if [ ! -d "/usr/local/include/ws2811" ]; then
     cd ..
 fi
 
+#Portaudio
 if [ ! -d "portaudio" ]; then
     #download stable release 19.7 from portaudio (http://files.portaudio.com/)
     echo "downloading portaudio now..."
@@ -55,7 +57,7 @@ if [ ! -d "portaudio" ]; then
     tar -xf pa_stable_v190700_20210406.tgz
     rm pa_stable_v190700_20210406.tgz
 fi
-if [ ! -f "/usr/local/include/portaudio.h "]; then
+if [ ! -f "/usr/local/include/portaudio.h" ]; then
     echo "installing portaudio now..."
     cd fftw3
     ./configure
@@ -64,4 +66,17 @@ if [ ! -f "/usr/local/include/portaudio.h "]; then
     cd ..
 fi
 
+#WiringPi
+if [ ! -d "WiringPi" ]; then
+    #download specific Commit directly from git
+    wget "https://github.com/WiringPi/WiringPi/archive/5de0d8f5739ccc00ab761639a7e8d3d1696a480a.zip"
+    unzip 5de0d8f5739ccc00ab761639a7e8d3d1696a480a.zip
+    mv WiringPi-5de0d8f5739ccc00ab761639a7e8d3d1696a480a/ WiringPi/
+fi
+if [ ! -f "/usr/local/include/wiringPi.h"]
+    #use automatic script to install wiringPi
+    cd WiringPi
+    ./build
+    cd ..
+fi
 cd ..
