@@ -4,6 +4,7 @@
 #include <sstream>
 #include <signal.h>
 #include <algorithm>
+#include <fstream>
 
 #include <portaudio.h>
 #include <fftw3.h>
@@ -55,6 +56,7 @@ bool useScreen = 0;
 float noteFrequencies[OCTAVES * NOTES] = {0};
 std::string noteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"};
 
+using namespace std;
 typedef struct
 {
     int frameIndex; /* Index into sample array. */
@@ -199,7 +201,7 @@ int calculateNote(double frequency)
             }
         }
     }
-    
+
     // filter out everything below 55, because it's the basic noise
     if (frequency < 55. || frequency > 8000)
         return -1;
@@ -263,6 +265,9 @@ int main(int argc, char *argv[])
     data.recordedSamples = (SAMPLE *)malloc(numBytes); /* From now on, recordedSamples is initialised. */
     stepSize = numSamples / ITERATION_SIZE;
     double results[stepSize] = {0};
+    bool firstRun = true;
+    ofstream plotFile;
+    plotFile.open("plotData");
 
     if (cmdOptionExists(argv, argv + argc, "-L"))
     {
@@ -308,7 +313,7 @@ int main(int argc, char *argv[])
             goto done;
         }
 
-        inputParameters.channelCount = 2; /* stereo input */
+        inputParameters.channelCount = NUM_CHANNELS; /* stereo input */
         inputParameters.sampleFormat = PA_SAMPLE_TYPE;
         inputParameters.suggestedLatency = Pa_GetDeviceInfo(inputParameters.device)->defaultLowInputLatency;
         inputParameters.hostApiSpecificStreamInfo = NULL;
@@ -328,7 +333,7 @@ int main(int argc, char *argv[])
 
         while ((err = Pa_IsStreamActive(stream)) == 1)
         {
-            Pa_Sleep(1000);
+            Pa_Sleep(1000 * NUM_SECONDS);
             // printf("index = %d\n", data.frameIndex);
             fflush(stdout);
         }
@@ -383,7 +388,9 @@ int main(int argc, char *argv[])
         highestFrequency = 0;
         highestFrequencyIndex = 0;
         highestPeak = 0;
-        for (i = 0; i < stepSize / 2; i++)
+        plotFile.open("plotData");
+
+        for (i = 0; i < stepSize / NUM_CHANNELS; i++)
         {
             results[i] = results[i] / ITERATION_SIZE;
             if (results[i] > highestPeak)
@@ -391,10 +398,14 @@ int main(int argc, char *argv[])
                 highestPeak = results[i];
                 highestFrequencyIndex = i;
             }
+            if (i / NUM_SECONDS * ITERATION_SIZE < 4000)
+                plotFile << i / NUM_SECONDS * ITERATION_SIZE << " " << results[i] << "\n";
             // printf("%g\n", results[i]);
         }
         // printf("=================================\n");
-
+        plotFile.close();
+        if (!firstRun)
+            system("gnuplot oneTimeGnuPlot");
         highestFrequency = highestFrequencyIndex / NUM_SECONDS * ITERATION_SIZE;
         printf("Frequency peak at: %d\n", highestFrequency);
         if (highestPeak > 1)
@@ -406,10 +417,12 @@ int main(int argc, char *argv[])
         {
             results[i] = 0;
         }
+        firstRun = false;
     }
 done:
     Pa_Terminate();
-
+    if (plotFile.is_open())
+        plotFile.close();
     if (data.recordedSamples)
         free(data.recordedSamples);
 
