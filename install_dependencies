@@ -15,7 +15,7 @@ if [ ! command -v gnuplot &> /dev/null ]; then
 fi
 
 if [ "$EUID" -ne 0 ]; then
-    echo "Please run as root for the \"make install\" sections"
+    echo "Please run as root for the \"make install\" sections (sudo is enough)"
     exit 1
 fi
 if [ ! -d "lib" ]; then
