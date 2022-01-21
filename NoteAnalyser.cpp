@@ -58,7 +58,8 @@ bool graphOutputs = true;
 #define GRAPHING_MIN_FREQ 32
 #define GRAPHING_MAX_FREQ 8000
 
-float noteFrequencies[OCTAVES * NOTES] = {0};
+double noteFrequencies[OCTAVES * NOTES] = {0};
+double notePeaks[OCTAVES * NOTES] = {0};
 bool noteHits[OCTAVES * NOTES] = {0};
 std::string noteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"};
 
@@ -241,13 +242,19 @@ void printNote(int note)
         printToScreen(output.str(), 1);
 }
 
-void printNotes()
+//todo: implement multiple note calculation
+void calculateNotes()
+{
+
+}
+
+void printNotes(bool notesToPrint[])
 {
     bool recognizedSomething = false;
     std::stringstream output;
     for (int i = 0; i < NOTES * OCTAVES; i++)
     {
-        if (noteHits[i])
+        if (notesToPrint[i])
         {
             recognizedSomething = true;
             output << noteNames[i % 12].c_str() << i / 12 << " ";
@@ -258,16 +265,39 @@ void printNotes()
     else
         printf("No Notes recognized!");
 }
-
-void filterPeaks(double *toFilter, int arraySize)
+/**
+ * @brief Filter input to only peaks to output by comparing left and right of values.
+ * 
+ * @param toFilter input array to check
+ * @param output output (same size as input) for peaks only, rest is filled with 0
+ * @param arraySize size of both arrays
+ */
+void filterPeaks(double *toFilter,double *output, int arraySize)
 {
-    double delta;
+    int VALUE_CUTOFF = 3;
     int cooldown = 0;
-    bool goingUp = true;
-
-    for (int i = 0; i < arraySize; i++)
+    double oldValue = 0;
+    double lastValue = toFilter[0];
+    // go through the array
+    for (int i = 1; i < arraySize; i++)
     {
-        toFilter[i];
+        // throw away everything under constant
+        if (toFilter[i] > VALUE_CUTOFF)
+        {
+            //check if last value was lokal peak
+            if (lastValue > oldValue && lastValue > toFilter[i])
+            {
+                // try to look ahead one more to try and avoid noise || let second last value pass for free
+                if ((i + 1 < arraySize && lastValue > toFilter[i + 1]) || i + 1 == arraySize - 1)
+                {
+                    // remember spike
+                    output[i-1] = lastValue;
+                }
+            }
+        }
+        //advance comparison values
+        oldValue = lastValue;
+        lastValue = toFilter[i];
     }
 }
 
@@ -329,9 +359,12 @@ int main(int argc, char *argv[])
     signal(SIGINT, inthand);
     while (!stop)
     {
+        //reset arrays and variables
+        fill(notePeaks, notePeaks+(OCTAVES + NOTES), 0);
         data.frameIndex = 0;
-        for (i = 0; i < numSamples; i++)
-            data.recordedSamples[i] = 0;
+        fill(data.recordedSamples, data.recordedSamples+numSamples, 0);
+
+
         // re route stderr to hide ALSA errors that cannot easily be disabled
         // see: https://stackoverflow.com/questions/24778998/how-to-disable-or-re-route-alsa-lib-logging
         freopen("/dev/null", "w", stderr);
@@ -464,7 +497,10 @@ int main(int argc, char *argv[])
         highestFrequency = highestFrequencyIndex / NUM_SECONDS * ITERATION_SIZE;
         printf("Frequency peak at: %d\n", highestFrequency);
         if (multipleNotes)
-            printNotes();
+        {
+            calculateNotes();
+            printNotes(noteHits);
+        }
         else
         {
             if (highestPeak > 1)
