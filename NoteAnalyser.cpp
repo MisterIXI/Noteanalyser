@@ -15,7 +15,7 @@
 /* #define SAMPLE_RATE  (17932) // Test failure to open with this value. */
 #define SAMPLE_RATE (44100)
 #define FRAMES_PER_BUFFER (512)
-#define NUM_SECONDS (.5)
+#define NUM_SECONDS (1)
 #define NUM_CHANNELS (2)
 /* #define DITHER_FLAG     (paDitherOff) */
 #define DITHER_FLAG (0)
@@ -51,9 +51,15 @@ typedef unsigned char SAMPLE;
 #define NOTES 12
 
 // default without LCD
-bool useScreen = 0;
+bool useScreen = false;
+bool multipleNotes = false;
+bool graphOutputs = true;
+
+#define GRAPHING_MIN_FREQ 32
+#define GRAPHING_MAX_FREQ 8000
 
 float noteFrequencies[OCTAVES * NOTES] = {0};
+bool noteHits[OCTAVES * NOTES] = {0};
 std::string noteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"};
 
 using namespace std;
@@ -267,15 +273,15 @@ int main(int argc, char *argv[])
     double results[stepSize] = {0};
     bool firstRun = true;
     ofstream plotFile;
-    plotFile.open("plotData");
+    ofstream analysisFile;
 
     if (cmdOptionExists(argv, argv + argc, "-L"))
     {
         useScreen = 1;
         init_i2c_screen();
     }
-    else
-        printf("Call with \"-L\" to use i2cLCD\n");
+    // else
+    // printf("Call with \"-L\" to use i2cLCD\n");
     fflush(stdout);
 
     fftw_complex in[stepSize];
@@ -390,34 +396,66 @@ int main(int argc, char *argv[])
         highestPeak = 0;
         plotFile.open("plotData");
 
+        // reset noteHits
+        for (int i = 0; i < OCTAVES * NOTES; i++)
+        {
+            noteHits[i] = false;
+        }
+
+        // process results
         for (i = 0; i < stepSize / NUM_CHANNELS; i++)
         {
+            int currFrequency = i / NUM_SECONDS * ITERATION_SIZE;
             results[i] = results[i] / ITERATION_SIZE;
-            if (results[i] > highestPeak)
+            if (currFrequency > GRAPHING_MIN_FREQ && currFrequency < GRAPHING_MAX_FREQ)
+                if (multipleNotes)
+                {
+                    if (results[i] > 3)
+                        noteHits[calculateNote(i)] = true;
+                }
+                else
+                {
+                    if (results[i] > highestPeak)
+                    {
+                        highestPeak = results[i];
+                        highestFrequencyIndex = i;
+                    }
+                }
+            if (graphOutputs && currFrequency > GRAPHING_MIN_FREQ && currFrequency < GRAPHING_MAX_FREQ)
             {
-                highestPeak = results[i];
-                highestFrequencyIndex = i;
+                plotFile << currFrequency << " " << results[i] << "\n";
             }
-            if (i / NUM_SECONDS * ITERATION_SIZE < 4000)
-                plotFile << i / NUM_SECONDS * ITERATION_SIZE << " " << results[i] << "\n";
             // printf("%g\n", results[i]);
         }
         // printf("=================================\n");
         plotFile.close();
-        if (!firstRun)
+        if (!firstRun && graphOutputs)
             system("gnuplot oneTimeGnuPlot");
         highestFrequency = highestFrequencyIndex / NUM_SECONDS * ITERATION_SIZE;
         printf("Frequency peak at: %d\n", highestFrequency);
-        if (highestPeak > 1)
-            printNote(calculateNote(highestFrequency));
-        else
-            printNote(-1);
+        if (multipleNotes)
+        {
+            if (highestPeak > 1)
+                printNote(calculateNote(highestFrequency));
+            else
+                printNote(-1);
+        }
         printf("FrequencyValue: %g\n", highestPeak);
+        analysisFile.open("frequencyScale", std::ofstream::app);
+        int freq = 0;
+        if (sscanf(argv[1], "%i", &freq) != 1)
+        {
+            fprintf(stderr, "error - not an integer");
+        }
+        freq = noteFrequencies[freq];
+        analysisFile << freq << " " << results[freq] << endl;
+        analysisFile.close();
         for (int i = 0; i < stepSize; i++)
         {
             results[i] = 0;
         }
         firstRun = false;
+        stop = true;
     }
 done:
     Pa_Terminate();
