@@ -241,6 +241,36 @@ void printNote(int note)
         printToScreen(output.str(), 1);
 }
 
+void printNotes()
+{
+    bool recognizedSomething = false;
+    std::stringstream output;
+    for (int i = 0; i < NOTES * OCTAVES; i++)
+    {
+        if (noteHits[i])
+        {
+            recognizedSomething = true;
+            output << noteNames[i % 12].c_str() << i / 12 << " ";
+        }
+    }
+    if (recognizedSomething)
+        printf("Notes recognized: %s\n", output.str().c_str());
+    else
+        printf("No Notes recognized!");
+}
+
+void filterPeaks(double *toFilter, int arraySize)
+{
+    double delta;
+    int cooldown = 0;
+    bool goingUp = true;
+
+    for (int i = 0; i < arraySize; i++)
+    {
+        toFilter[i];
+    }
+}
+
 bool cmdOptionExists(char **begin, char **end, const std::string &option)
 {
     return std::find(begin, end, option) != end;
@@ -434,6 +464,8 @@ int main(int argc, char *argv[])
         highestFrequency = highestFrequencyIndex / NUM_SECONDS * ITERATION_SIZE;
         printf("Frequency peak at: %d\n", highestFrequency);
         if (multipleNotes)
+            printNotes();
+        else
         {
             if (highestPeak > 1)
                 printNote(calculateNote(highestFrequency));
