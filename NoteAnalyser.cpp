@@ -15,7 +15,7 @@
 /* #define SAMPLE_RATE  (17932) // Test failure to open with this value. */
 #define SAMPLE_RATE (44100)
 #define FRAMES_PER_BUFFER (512)
-#define NUM_SECONDS (1)
+#define NUM_SECONDS (0.5)
 #define NUM_CHANNELS (2)
 /* #define DITHER_FLAG     (paDitherOff) */
 #define DITHER_FLAG (0)
@@ -332,15 +332,14 @@ int main(int argc, char *argv[])
     double results[stepSize] = {0};
     bool firstRun = true;
     ofstream plotFile;
-    ofstream analysisFile;
     initializeNoteFrequencies();
     if (cmdOptionExists(argv, argv + argc, "-L"))
     {
         useScreen = 1;
         init_i2c_screen();
     }
-    // else
-    // printf("Call with \"-L\" to use i2cLCD\n");
+    else
+        printf("Call with \"-L\" to use i2cLCD\n");
     fflush(stdout);
 
     fftw_complex in[stepSize];
@@ -507,25 +506,11 @@ int main(int argc, char *argv[])
                 printNote(-1);
         }
         printf("FrequencyValue: %g\n", highestPeak);
-        analysisFile.open("frequencyScale", std::ofstream::app);
-        int freq = 0;
-        if (sscanf(argv[1], "%i", &freq) != 1)
-        {
-            fprintf(stderr, "error - not an integer");
-        }
-        // freq = 60;
-        freq = round(noteFrequencies[freq]);
-        if((results[freq] +3) < results[highestFrequencyIndex])
-            freq = highestFrequencyIndex;
-        printf("freq saved: %d\n", freq);
-        analysisFile << freq << " " << results[freq] << endl;
-        analysisFile.close();
         for (int i = 0; i < stepSize; i++)
         {
             results[i] = 0;
         }
         firstRun = false;
-        stop = true;
     }
 done:
     Pa_Terminate();
