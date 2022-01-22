@@ -9,6 +9,7 @@
 #include <portaudio.h>
 #include <fftw3.h>
 #include <string>
+#include <ws2811/ws2811.h>
 
 #include "i2cLEDScreen.h"
 
