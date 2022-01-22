@@ -509,6 +509,7 @@ int main(int argc, char *argv[])
         printf("FrequencyValue: %g\n", highestPeak);
         analysisFile.open("frequencyScale", std::ofstream::app);
         int freq = 0;
+        // freq == Freqency ID according to the notes from noteFrequencies (C0(0) - B8(108))
         if (sscanf(argv[1], "%i", &freq) != 1)
         {
             fprintf(stderr, "error - not an integer");
