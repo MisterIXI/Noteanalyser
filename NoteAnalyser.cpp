@@ -192,23 +192,23 @@ static int playCallback(const void *inputBuffer, void *outputBuffer, unsigned lo
     return finished;
 }
 
-int calculateNote(double frequency)
+void initializeNoteFrequencies()
 {
-    if (noteFrequencies[0] == 0) // check if array is already initialized
+    // calculate NoteFrequencies
+    float currFreq = 16.35f;
+    for (size_t i = 0; i < OCTAVES; i++)
     {
-        // calculate NoteFrequencies
-        float currFreq = 16.35f;
-        for (size_t i = 0; i < OCTAVES; i++)
+        for (size_t j = 0; j < NOTES; j++)
         {
-            for (size_t j = 0; j < NOTES; j++)
-            {
-                noteFrequencies[j + i * NOTES] = currFreq;
-                // printf("%f  %d  %f\n", currFreq, j+i*NOTES, pow(2.f,1.f/12.f));
-                currFreq = currFreq * pow(2.f, 1.f / 12.f);
-            }
+            noteFrequencies[j + i * NOTES] = currFreq;
+            // printf("%f  %d  %f\n", currFreq, j+i*NOTES, pow(2.f,1.f/12.f));
+            currFreq = currFreq * pow(2.f, 1.f / 12.f);
         }
     }
+}
 
+int calculateNote(double frequency)
+{
     // filter out everything below 55, because it's the basic noise
     if (frequency < 55. || frequency > 8000)
         return -1;
@@ -242,10 +242,9 @@ void printNote(int note)
         printToScreen(output.str(), 1);
 }
 
-//todo: implement multiple note calculation
+// todo: implement multiple note calculation
 void calculateNotes()
 {
-
 }
 
 void printNotes(bool notesToPrint[])
@@ -267,12 +266,12 @@ void printNotes(bool notesToPrint[])
 }
 /**
  * @brief Filter input to only peaks to output by comparing left and right of values.
- * 
+ *
  * @param toFilter input array to check
  * @param output output (same size as input) for peaks only, rest is filled with 0
  * @param arraySize size of both arrays
  */
-void filterPeaks(double *toFilter,double *output, int arraySize)
+void filterPeaks(double *toFilter, double *output, int arraySize)
 {
     int VALUE_CUTOFF = 3;
     int cooldown = 0;
@@ -284,18 +283,18 @@ void filterPeaks(double *toFilter,double *output, int arraySize)
         // throw away everything under constant
         if (toFilter[i] > VALUE_CUTOFF)
         {
-            //check if last value was lokal peak
+            // check if last value was lokal peak
             if (lastValue > oldValue && lastValue > toFilter[i])
             {
                 // try to look ahead one more to try and avoid noise || let second last value pass for free
                 if ((i + 1 < arraySize && lastValue > toFilter[i + 1]) || i + 1 == arraySize - 1)
                 {
                     // remember spike
-                    output[i-1] = lastValue;
+                    output[i - 1] = lastValue;
                 }
             }
         }
-        //advance comparison values
+        // advance comparison values
         oldValue = lastValue;
         lastValue = toFilter[i];
     }
@@ -334,7 +333,7 @@ int main(int argc, char *argv[])
     bool firstRun = true;
     ofstream plotFile;
     ofstream analysisFile;
-
+    initializeNoteFrequencies();
     if (cmdOptionExists(argv, argv + argc, "-L"))
     {
         useScreen = 1;
@@ -359,11 +358,10 @@ int main(int argc, char *argv[])
     signal(SIGINT, inthand);
     while (!stop)
     {
-        //reset arrays and variables
-        fill(notePeaks, notePeaks+(OCTAVES + NOTES), 0);
+        // reset arrays and variables
+        fill(notePeaks, notePeaks + (OCTAVES + NOTES), 0);
         data.frameIndex = 0;
-        fill(data.recordedSamples, data.recordedSamples+numSamples, 0);
-
+        fill(data.recordedSamples, data.recordedSamples + numSamples, 0);
 
         // re route stderr to hide ALSA errors that cannot easily be disabled
         // see: https://stackoverflow.com/questions/24778998/how-to-disable-or-re-route-alsa-lib-logging
@@ -515,7 +513,11 @@ int main(int argc, char *argv[])
         {
             fprintf(stderr, "error - not an integer");
         }
-        freq = noteFrequencies[freq];
+        // freq = 60;
+        freq = round(noteFrequencies[freq]);
+        if((results[freq] +3) < results[highestFrequencyIndex])
+            freq = highestFrequencyIndex;
+        printf("freq saved: %d\n", freq);
         analysisFile << freq << " " << results[freq] << endl;
         analysisFile.close();
         for (int i = 0; i < stepSize; i++)
