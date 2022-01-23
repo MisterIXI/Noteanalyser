@@ -5,6 +5,7 @@
 #include <signal.h>
 #include <algorithm>
 #include <fstream>
+#include <vector>
 
 #include <portaudio.h>
 #include <fftw3.h>
@@ -305,6 +306,27 @@ bool cmdOptionExists(char **begin, char **end, const std::string &option)
     return std::find(begin, end, option) != end;
 }
 
+// Calculates the corrected value, louder values are pitched down, quieter pitched up
+double correctValue(int frequency, double value) {
+    ifstream correctionFile("frequncyCorrection");
+    int freq;
+    double val;
+    double shortestDistance = 100.0;
+    double currentDistance = 0.0;
+    double correction = 0.0;
+
+    while(correctionFile >> freq >> val) {
+        currentDistance = abs(frequency - freq);
+
+        if(currentDistance < shortestDistance) {
+            correction = val;
+            shortestDistance = currentDistance;
+        }
+    }
+
+    return correction * value;
+}
+
 /*******************************************************************/
 int main(int argc, char *argv[]);
 int main(int argc, char *argv[])
@@ -468,6 +490,7 @@ int main(int argc, char *argv[])
         {
             int currFrequency = i / NUM_SECONDS * ITERATION_SIZE;
             results[i] = results[i] / ITERATION_SIZE;
+            results[i] = correctValue(i, results[i]);
             if (currFrequency > GRAPHING_MIN_FREQ && currFrequency < GRAPHING_MAX_FREQ)
                 if (multipleNotes)
                 {
