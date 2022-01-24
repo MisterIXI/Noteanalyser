@@ -72,6 +72,11 @@ typedef struct
     SAMPLE *recordedSamples;
 } paTestData;
 
+struct mapping_t {
+    vector<int> frequencies;
+    vector<double> volume;
+} mappingStruct;
+
 volatile sig_atomic_t stop;
 
 void inthand(int signum)
@@ -306,20 +311,31 @@ bool cmdOptionExists(char **begin, char **end, const std::string &option)
     return std::find(begin, end, option) != end;
 }
 
-// Calculates the corrected value, louder values are pitched down, quieter pitched up
-double correctValue(int frequency, double value) {
+// Returns correction values from file
+void readCorrectionValues() {
     ifstream correctionFile("frequncyCorrection");
+    // Alternative values (approximnation)
+    // ifstream correctionFile("frequncyCorrectionAlt");
     int freq;
     double val;
+
+    while(correctionFile >> freq >> val) {
+        mappingStruct.frequencies.push_back(freq);
+        mappingStruct.volume.push_back(val);
+    }
+}
+
+// Calculates the corrected value, louder values are pitched down, quieter pitched up
+double correctValue(int frequency, double value) {
     double shortestDistance = 100.0;
     double currentDistance = 0.0;
     double correction = 0.0;
 
-    while(correctionFile >> freq >> val) {
-        currentDistance = abs(frequency - freq);
+    for(int i = 0; i < mappingStruct.frequencies.size(); i++) {
+        currentDistance = abs(frequency - mappingStruct.frequencies[i]);
 
         if(currentDistance < shortestDistance) {
-            correction = val;
+            correction = mappingStruct.volume[i];
             shortestDistance = currentDistance;
         }
     }
@@ -356,6 +372,7 @@ int main(int argc, char *argv[])
     ofstream plotFile;
     ofstream analysisFile;
     initializeNoteFrequencies();
+    readCorrectionValues();
     if (cmdOptionExists(argv, argv + argc, "-L"))
     {
         useScreen = 1;
