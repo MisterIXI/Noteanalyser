@@ -53,27 +53,27 @@ int main()
         fprintf(stderr, "ws2811_init failed: %s\n", ws2811_get_return_t_str(ret));
         return ret;
     }
-    // for (int loop = 0; loop < 4; loop++)
-    // {
-
-    //     for (int i = 0; i < 96; i++)
-    //     {
-
-    //         ledstrip.channel[0].leds[i] = dotcolors[loop*2];
-    //         ws2811_render(&ledstrip);
-    //         usleep(10000);
-    //         ledstrip.channel[0].leds[i] = 0;
-    //         ws2811_render(&ledstrip);
-    //     }
-    // }
-    for (int i = 0; i < 8; i++)
+    for (int loop = 0; loop < 15; loop++)
     {
 
-        ledstrip.channel[0].leds[8] = dotcolors[i];
-        ws2811_render(&ledstrip);
-        usleep(1000000);
-        ledstrip.channel[0].leds[8] = 0;
-        ws2811_render(&ledstrip);
+        for (int i = 0; i < 96; i++)
+        {
+
+            ledstrip.channel[0].leds[i] = dotcolors[loop%8];
+            ws2811_render(&ledstrip);
+            usleep(10000);
+            ledstrip.channel[0].leds[i] = 0;
+            ws2811_render(&ledstrip);
+        }
     }
+    // for (int i = 0; i < 12; i++)
+    // {
+
+    //     ledstrip.channel[0].leds[8] = dotcolors[i];
+    //     ws2811_render(&ledstrip);
+    //     usleep(1000000);
+    //     ledstrip.channel[0].leds[8] = 0;
+    //     ws2811_render(&ledstrip);
+    // }
     return 0;
 }
