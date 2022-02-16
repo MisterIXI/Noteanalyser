@@ -4,7 +4,7 @@ if [ ! -f "install_dependencies" ]; then
     exit 1
 fi
 
-if [ ! command -v cmake123 &> /dev/null ]; then
+if [ ! command -v cmake &> /dev/null ]; then
     echo "Please install cmake first. (e.g. \"sudo apt install cmake\")"
     exit 1;
 fi

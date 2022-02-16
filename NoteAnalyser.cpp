@@ -385,8 +385,8 @@ int main(int argc, char *argv[])
         useScreen = 1;
         init_i2c_screen();
     }
-    // else
-    // printf("Call with \"-L\" to use i2cLCD\n");
+    else
+        printf("Call with \"-L\" to use i2cLCD\n");
     fflush(stdout);
 
     fftw_complex in[stepSize];
@@ -564,7 +564,6 @@ int main(int argc, char *argv[])
             else
                 printNote(-1);
         }
-
         for (int i = 0; i < stepSize; i++)
         {
             results[i] = 0;
