@@ -1,2 +1,0 @@
-i=12
-./NoteAnalyser $i; i=$((i+1))

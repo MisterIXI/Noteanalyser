@@ -5,6 +5,9 @@
 #include <signal.h>
 #include <algorithm>
 #include <fstream>
+#include <vector>
+
+//#include <chrono>
 
 #include <portaudio.h>
 #include <fftw3.h>
@@ -57,7 +60,7 @@ bool multipleNotes = false;
 bool graphOutputs = true;
 
 #define GRAPHING_MIN_FREQ 32
-#define GRAPHING_MAX_FREQ 8000
+#define GRAPHING_MAX_FREQ 4000
 
 double noteFrequencies[OCTAVES * NOTES] = {0};
 double notePeaks[OCTAVES * NOTES] = {0};
@@ -71,6 +74,12 @@ typedef struct
     int maxFrameIndex;
     SAMPLE *recordedSamples;
 } paTestData;
+
+struct mapping_t
+{
+    vector<int> frequencies;
+    vector<double> volume;
+} mappingStruct;
 
 volatile sig_atomic_t stop;
 
@@ -306,6 +315,43 @@ bool cmdOptionExists(char **begin, char **end, const std::string &option)
     return std::find(begin, end, option) != end;
 }
 
+// Returns correction values from file
+void readCorrectionValues()
+{
+    ifstream correctionFile("frequencyCorrection");
+    // Alternative values (approximnation)
+    // ifstream correctionFile("frequencyCorrectionAlt");
+    int freq;
+    double val;
+
+    while (correctionFile >> freq >> val)
+    {
+        mappingStruct.frequencies.push_back(freq);
+        mappingStruct.volume.push_back(val);
+    }
+}
+
+// Calculates the corrected value, louder values are pitched down, quieter pitched up
+double correctValue(int frequency, double value)
+{
+    double shortestDistance = 100.0;
+    double currentDistance = 0.0;
+    double correction = 0.0;
+
+    for (int i = 0; i < mappingStruct.frequencies.size(); i++)
+    {
+        currentDistance = abs(frequency - mappingStruct.frequencies[i]);
+
+        if (currentDistance < shortestDistance)
+        {
+            correction = mappingStruct.volume[i];
+            shortestDistance = currentDistance;
+        }
+    }
+
+    return correction * value;
+}
+
 /*******************************************************************/
 int main(int argc, char *argv[]);
 int main(int argc, char *argv[])
@@ -334,6 +380,7 @@ int main(int argc, char *argv[])
     bool firstRun = true;
     ofstream plotFile;
     initializeNoteFrequencies();
+    readCorrectionValues();
     if (cmdOptionExists(argv, argv + argc, "-L"))
     {
         useScreen = 1;
@@ -358,6 +405,11 @@ int main(int argc, char *argv[])
     signal(SIGINT, inthand);
     while (!stop)
     {
+        // using std::chrono::high_resolution_clock;
+        // using std::chrono::duration_cast;
+        // using std::chrono::duration;
+        // using std::chrono::milliseconds;
+        // auto t1 = high_resolution_clock::now();
         // reset arrays and variables
         fill(notePeaks, notePeaks + (OCTAVES + NOTES), 0);
         data.frameIndex = 0;
@@ -400,8 +452,10 @@ int main(int argc, char *argv[])
 
         while ((err = Pa_IsStreamActive(stream)) == 1)
         {
-            Pa_Sleep(1000 * NUM_SECONDS);
+            // printf("Waiting for pa!\n");
+            Pa_Sleep(1100 * NUM_SECONDS);
             // printf("index = %d\n", data.frameIndex);
+
             fflush(stdout);
         }
 
@@ -468,6 +522,7 @@ int main(int argc, char *argv[])
         {
             int currFrequency = i / NUM_SECONDS * ITERATION_SIZE;
             results[i] = results[i] / ITERATION_SIZE;
+            results[i] = correctValue(i, results[i]);
             if (currFrequency > GRAPHING_MIN_FREQ && currFrequency < GRAPHING_MAX_FREQ)
                 if (multipleNotes)
                 {
@@ -501,17 +556,23 @@ int main(int argc, char *argv[])
         }
         else
         {
-            if (highestPeak > 1)
+            if (highestPeak > 10)
+            {
+
                 printNote(calculateNote(highestFrequency));
+                printf("With a strength of: %f\n", results[highestFrequencyIndex]);
+            }
             else
                 printNote(-1);
         }
-        printf("FrequencyValue: %g\n", highestPeak);
         for (int i = 0; i < stepSize; i++)
         {
             results[i] = 0;
         }
         firstRun = false;
+        // auto t2 = high_resolution_clock::now();
+        // duration<double, std::milli> ms_double = t2 - t1;
+        // printf("Calculated for: %fms\n", ms_double.count());
     }
 done:
     Pa_Terminate();
