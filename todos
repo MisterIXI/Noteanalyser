@@ -15,3 +15,22 @@
 - Idee umsetzen um Peaks zu finden
     schauen wie lange es steigt und bei wechsel den letzten Wert speichern bis wieder richtig "steigt"
 
+
+
+--------
+
+Ziel:
+- Abgabe (Doku & Video)
+- LEDs --> Robert
+- 1 Oktave, x Töne (echtes KLavier) wird erkannt
+    - Frequenzskalierung
+    - Peakerkennung
+
+Required:
+- Doku
+- Video
+- LEDs
+- 1 Oktave 1 Ton (echtes KLavier) wird erkannt
+
+Optional
+- 1 Oktave x Töne können erkannt werden
