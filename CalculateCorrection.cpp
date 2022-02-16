@@ -11,17 +11,18 @@ struct mapping_t {
 // Calculate correction with one value per note
 void calculateCorrection1() {
     ifstream infile("frequencyScale");
-    ofstream outfile("frequncyCorrection");
+    ofstream outfile("frequencyCorrection");
     int frequency;
     double value;
     float level = 200.0;
     float counter = 0.0;
-    float stepSize = 1.5;
+    float stepSize = 0;
 
     while(infile >> frequency >> value) {
-        // Ignore frequencies below 180hz, values are getting to big
+        // Ignore frequencies below 180hz, values are getting too big
         if(frequency > 180) {
             double correction = (level - counter) / value;
+            correction = correction + (1 - correction)/4;
             outfile << frequency << " " << correction << endl;
             counter += stepSize;
         }
@@ -33,7 +34,7 @@ void calculateCorrection1() {
 
 // Calculate correction with approximate values
 void calculateCorrection2() {
-    ofstream outfile("frequncyCorrectionAlt");
+    ofstream outfile("frequencyCorrectionAlt");
     float level = 200.0;
     float counter = 0.0;
     float stepSize = 8;
