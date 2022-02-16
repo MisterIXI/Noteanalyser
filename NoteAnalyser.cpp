@@ -546,27 +546,12 @@ int main(int argc, char *argv[])
             else
                 printNote(-1);
         }
-        printf("FrequencyValue: %g\n", highestPeak);
-        analysisFile.open("frequencyScale", std::ofstream::app);
-        int freq = 0;
-        // freq == Freqency ID according to the notes from noteFrequencies (C0(0) - B8(108))
-        if (sscanf(argv[1], "%i", &freq) != 1)
-        {
-            fprintf(stderr, "error - not an integer");
-        }
-        // freq = 60;
-        freq = round(noteFrequencies[freq]);
-        if((results[freq] +3) < results[highestFrequencyIndex])
-            freq = highestFrequencyIndex;
-        printf("freq saved: %d\n", freq);
-        analysisFile << freq << " " << results[freq] << endl;
-        analysisFile.close();
+
         for (int i = 0; i < stepSize; i++)
         {
             results[i] = 0;
         }
         firstRun = false;
-        stop = true;
     }
 done:
     Pa_Terminate();
