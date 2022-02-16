@@ -16,7 +16,7 @@
 /* #define SAMPLE_RATE  (17932) // Test failure to open with this value. */
 #define SAMPLE_RATE (44100)
 #define FRAMES_PER_BUFFER (512)
-#define NUM_SECONDS (1)
+#define NUM_SECONDS (0.5)
 #define NUM_CHANNELS (2)
 /* #define DITHER_FLAG     (paDitherOff) */
 #define DITHER_FLAG (0)
@@ -57,7 +57,7 @@ bool multipleNotes = false;
 bool graphOutputs = true;
 
 #define GRAPHING_MIN_FREQ 32
-#define GRAPHING_MAX_FREQ 8000
+#define GRAPHING_MAX_FREQ 4000
 
 double noteFrequencies[OCTAVES * NOTES] = {0};
 double notePeaks[OCTAVES * NOTES] = {0};
@@ -313,9 +313,9 @@ bool cmdOptionExists(char **begin, char **end, const std::string &option)
 
 // Returns correction values from file
 void readCorrectionValues() {
-    ifstream correctionFile("frequncyCorrection");
+    ifstream correctionFile("frequencyCorrection");
     // Alternative values (approximnation)
-    // ifstream correctionFile("frequncyCorrectionAlt");
+    // ifstream correctionFile("frequencyCorrectionAlt");
     int freq;
     double val;
 
@@ -370,7 +370,6 @@ int main(int argc, char *argv[])
     double results[stepSize] = {0};
     bool firstRun = true;
     ofstream plotFile;
-    ofstream analysisFile;
     initializeNoteFrequencies();
     readCorrectionValues();
     if (cmdOptionExists(argv, argv + argc, "-L"))
