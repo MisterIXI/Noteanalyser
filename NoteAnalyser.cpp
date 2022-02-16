@@ -7,6 +7,8 @@
 #include <fstream>
 #include <vector>
 
+//#include <chrono>
+
 #include <portaudio.h>
 #include <fftw3.h>
 #include <string>
@@ -72,7 +74,8 @@ typedef struct
     SAMPLE *recordedSamples;
 } paTestData;
 
-struct mapping_t {
+struct mapping_t
+{
     vector<int> frequencies;
     vector<double> volume;
 } mappingStruct;
@@ -312,29 +315,34 @@ bool cmdOptionExists(char **begin, char **end, const std::string &option)
 }
 
 // Returns correction values from file
-void readCorrectionValues() {
+void readCorrectionValues()
+{
     ifstream correctionFile("frequencyCorrection");
     // Alternative values (approximnation)
     // ifstream correctionFile("frequencyCorrectionAlt");
     int freq;
     double val;
 
-    while(correctionFile >> freq >> val) {
+    while (correctionFile >> freq >> val)
+    {
         mappingStruct.frequencies.push_back(freq);
         mappingStruct.volume.push_back(val);
     }
 }
 
 // Calculates the corrected value, louder values are pitched down, quieter pitched up
-double correctValue(int frequency, double value) {
+double correctValue(int frequency, double value)
+{
     double shortestDistance = 100.0;
     double currentDistance = 0.0;
     double correction = 0.0;
 
-    for(int i = 0; i < mappingStruct.frequencies.size(); i++) {
+    for (int i = 0; i < mappingStruct.frequencies.size(); i++)
+    {
         currentDistance = abs(frequency - mappingStruct.frequencies[i]);
 
-        if(currentDistance < shortestDistance) {
+        if (currentDistance < shortestDistance)
+        {
             correction = mappingStruct.volume[i];
             shortestDistance = currentDistance;
         }
@@ -396,6 +404,11 @@ int main(int argc, char *argv[])
     signal(SIGINT, inthand);
     while (!stop)
     {
+        // using std::chrono::high_resolution_clock;
+        // using std::chrono::duration_cast;
+        // using std::chrono::duration;
+        // using std::chrono::milliseconds;
+        // auto t1 = high_resolution_clock::now();
         // reset arrays and variables
         fill(notePeaks, notePeaks + (OCTAVES + NOTES), 0);
         data.frameIndex = 0;
@@ -438,8 +451,10 @@ int main(int argc, char *argv[])
 
         while ((err = Pa_IsStreamActive(stream)) == 1)
         {
-            Pa_Sleep(1000 * NUM_SECONDS);
+            // printf("Waiting for pa!\n");
+            Pa_Sleep(1100 * NUM_SECONDS);
             // printf("index = %d\n", data.frameIndex);
+
             fflush(stdout);
         }
 
@@ -540,8 +555,12 @@ int main(int argc, char *argv[])
         }
         else
         {
-            if (highestPeak > 1)
+            if (highestPeak > 10)
+            {
+
                 printNote(calculateNote(highestFrequency));
+                printf("With a strength of: %f\n", results[highestFrequencyIndex]);
+            }
             else
                 printNote(-1);
         }
@@ -551,6 +570,9 @@ int main(int argc, char *argv[])
             results[i] = 0;
         }
         firstRun = false;
+        // auto t2 = high_resolution_clock::now();
+        // duration<double, std::milli> ms_double = t2 - t1;
+        // printf("Calculated for: %fms\n", ms_double.count());
     }
 done:
     Pa_Terminate();
