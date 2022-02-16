@@ -242,7 +242,7 @@ void printNote(int note)
 {
     std::stringstream output;
     if (note != -1)
-        output << "The Note detected was: " << noteNames[note % 12].c_str() << note / 12;
+        output << "Note detected: " << noteNames[note % 12].c_str() << note / 12;
     else
         output << "No Note recognized!";
 
