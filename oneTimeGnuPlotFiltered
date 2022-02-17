@@ -3,5 +3,5 @@ set ytics 0,10,150
 set xtics 0,100,4000
 set yrange [0:150]
 set grid ytics xtics
-set output 'picture.png'
-plot 'plotData' u 1:2 with boxes 
+set output 'pictureFiltered.png'
+plot 'plotDataFiltered' u 1:2 with boxes 
