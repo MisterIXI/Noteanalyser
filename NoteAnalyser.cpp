@@ -7,7 +7,7 @@
 #include <fstream>
 #include <vector>
 
-//#include <chrono>
+#include <chrono>
 
 #include <portaudio.h>
 #include <fftw3.h>
@@ -53,12 +53,13 @@ typedef unsigned char SAMPLE;
 #define OCTAVES 9
 #define NOTES 12
 
+#define VALUE_CUTOFF 15
 // default without LCD
 bool useScreen = false;
 bool multipleNotes = false;
 bool graphOutputs = true;
 
-#define GRAPHING_MIN_FREQ 32
+#define GRAPHING_MIN_FREQ 170
 #define GRAPHING_MAX_FREQ 4000
 
 double noteFrequencies[OCTAVES * NOTES] = {0};
@@ -282,31 +283,104 @@ void printNotes(bool notesToPrint[])
  */
 void filterPeaks(double *toFilter, double *output, int arraySize)
 {
-    int VALUE_CUTOFF = 3;
-    int cooldown = 0;
-    double oldValue = 0;
-    double lastValue = toFilter[0];
-    // go through the array
-    for (int i = 1; i < arraySize; i++)
+    double lastValue = 0;
+    double currentValue = 0;
+    double nextValue = 0;
+    // go through the array (excluding first and last place for comparison reasons)
+    for (int i = 1; i < arraySize - 1; i++)
     {
+        currentValue = toFilter[i];
         // throw away everything under constant
-        if (toFilter[i] > VALUE_CUTOFF)
+        if (currentValue > VALUE_CUTOFF)
         {
+            lastValue = toFilter[i - 1];
+            nextValue = toFilter[i + 1];
             // check if last value was lokal peak
-            if (lastValue > oldValue && lastValue > toFilter[i])
+            if (currentValue > lastValue && currentValue > nextValue)
             {
-                // try to look ahead one more to try and avoid noise || let second last value pass for free
-                if ((i + 1 < arraySize && lastValue > toFilter[i + 1]) || i + 1 == arraySize - 1)
+                // remember spike
+                output[i] = currentValue;
+            }
+        }
+    }
+    int PEAK_DIFFERENCE_PER_STEP = 2;
+    int PEAK_DIFFERENCE_OFFSET = 5;
+    int PEAK_DISTANCE = 30;
+
+    bool filtered = true;
+    while (filtered)
+    {
+        filtered = false;
+        int lastPeak = -1;
+        int currentPeak = -1;
+        int nextPeak = -1;
+        // go through the output and kick potential noise peaks
+        for (int i = 0; i < arraySize; i++)
+        {
+            if (output[i] > 0)
+            {
+                lastPeak = currentPeak;
+                currentPeak = nextPeak;
+                nextPeak = i;
+                // check if at least two values are set and if currentPeak was deleted
+                if (currentPeak != -1 && output[currentPeak] > 0)
                 {
-                    // remember spike
-                    output[i - 1] = lastValue;
+                    // check behind (only if all three values have been set)
+                    if (lastPeak != -1)
+                    {
+                        // check if lastPeak was deleted
+                        if (output[lastPeak] > 0)
+                        {
+                            // check behind only if difference in peakHeight ist > PEAK_DIFFERENCE_PER_STEP*distance and both indices are closer together than PEAK_DISTANCE
+                            if (output[currentPeak] - output[lastPeak] > PEAK_DIFFERENCE_PER_STEP * (currentPeak - lastPeak) + PEAK_DIFFERENCE_OFFSET && currentPeak - lastPeak < PEAK_DISTANCE)
+                            {
+                                output[lastPeak] = 0;
+                                filtered = true;
+                                printf("%d - %d = %d\n", currentPeak, lastPeak, currentPeak - lastPeak);
+                            }
+                        }
+                    }
+                    // check forward
+                    if (output[currentPeak] - output[nextPeak] > PEAK_DIFFERENCE_PER_STEP * (nextPeak - currentPeak) + PEAK_DIFFERENCE_OFFSET && nextPeak - currentPeak < PEAK_DISTANCE)
+                    {
+                        output[nextPeak] = 0;
+                        filtered = true;
+                    }
                 }
             }
         }
-        // advance comparison values
-        oldValue = lastValue;
-        lastValue = toFilter[i];
     }
+}
+
+/**
+ * @brief Finds the nearest not 0 entry in the given array.
+ *
+ * @param array Array to search the new entry in
+ * @param findIndex The start index from where to start the search
+ * @param maxDistance The maximum distance it should search from startpoint (findIndex - maxDistance && findIndex + maxDistance)
+ * @param arraySize The size of the given array to avoid OOB Errors
+ * @return The index of the nearest not 0 entry of the Array. -1 if nothing is found.
+ */
+int findPeak(double *array, int findIndex, int maxDistance, int arraySize)
+{
+    if (array[findIndex] != 0)
+        return findIndex;
+    // search for the nearest not null entry in the filtered peakArray
+    for (int i = 0; i < maxDistance; i++)
+    {
+        if (findIndex + i < arraySize)
+            if (array[findIndex + i] != 0)
+                return findIndex + i;
+        if (findIndex - i >= 0)
+            if (array[findIndex - i] != 0)
+                return findIndex - i;
+    }
+    return -1;
+}
+
+void removeOvertones(double *array, int startFrequency, int startIndex)
+{
+    //todo: implement
 }
 
 bool cmdOptionExists(char **begin, char **end, const std::string &option)
@@ -376,8 +450,10 @@ int main(int argc, char *argv[])
     data.recordedSamples = (SAMPLE *)malloc(numBytes); /* From now on, recordedSamples is initialised. */
     stepSize = numSamples / ITERATION_SIZE;
     double results[stepSize] = {0};
+    double filteredResults[stepSize] = {0};
     bool firstRun = true;
     ofstream plotFile;
+    ofstream plotFileFiltered;
     initializeNoteFrequencies();
     readCorrectionValues();
     if (cmdOptionExists(argv, argv + argc, "-L"))
@@ -404,11 +480,11 @@ int main(int argc, char *argv[])
     signal(SIGINT, inthand);
     while (!stop)
     {
-        // using std::chrono::high_resolution_clock;
-        // using std::chrono::duration_cast;
-        // using std::chrono::duration;
-        // using std::chrono::milliseconds;
-        // auto t1 = high_resolution_clock::now();
+        using std::chrono::high_resolution_clock;
+        using std::chrono::duration_cast;
+        using std::chrono::duration;
+        using std::chrono::milliseconds;
+        auto t1 = high_resolution_clock::now();
         // reset arrays and variables
         fill(notePeaks, notePeaks + (OCTAVES + NOTES), 0);
         data.frameIndex = 0;
@@ -509,7 +585,7 @@ int main(int argc, char *argv[])
         highestFrequencyIndex = 0;
         highestPeak = 0;
         plotFile.open("plotData");
-
+        plotFileFiltered.open("plotDataFiltered");
         // reset noteHits
         for (int i = 0; i < OCTAVES * NOTES; i++)
         {
@@ -536,16 +612,27 @@ int main(int argc, char *argv[])
                         highestFrequencyIndex = i;
                     }
                 }
-            if (graphOutputs && currFrequency > GRAPHING_MIN_FREQ && currFrequency < GRAPHING_MAX_FREQ)
+        }
+        filterPeaks(results, filteredResults, stepSize);
+        if (graphOutputs)
+        {
+            for (i = 0; i < stepSize / NUM_CHANNELS; i++)
             {
-                plotFile << currFrequency << " " << results[i] << "\n";
+                int currFrequency = i / NUM_SECONDS * ITERATION_SIZE;
+                if (graphOutputs && currFrequency > GRAPHING_MIN_FREQ && currFrequency < GRAPHING_MAX_FREQ)
+                {
+                    plotFile << currFrequency << " " << results[i] << "\n";
+                    plotFileFiltered << currFrequency << " " << filteredResults[i] << "\n";
+                }
             }
-            // printf("%g\n", results[i]);
         }
         // printf("=================================\n");
         plotFile.close();
+        plotFileFiltered.close();
         if (!firstRun && graphOutputs)
             system("gnuplot oneTimeGnuPlot");
+        if (!firstRun && graphOutputs)
+            system("gnuplot oneTimeGnuPlotFiltered");
         highestFrequency = highestFrequencyIndex / NUM_SECONDS * ITERATION_SIZE;
         printf("Frequency peak at: %d\n", highestFrequency);
         if (multipleNotes)
@@ -555,7 +642,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            if (highestPeak > 10)
+            if (highestPeak > VALUE_CUTOFF)
             {
 
                 printNote(calculateNote(highestFrequency));
@@ -567,11 +654,12 @@ int main(int argc, char *argv[])
         for (int i = 0; i < stepSize; i++)
         {
             results[i] = 0;
+            filteredResults[i] = 0;
         }
         firstRun = false;
-        // auto t2 = high_resolution_clock::now();
-        // duration<double, std::milli> ms_double = t2 - t1;
-        // printf("Calculated for: %fms\n", ms_double.count());
+        auto t2 = high_resolution_clock::now();
+        duration<double, std::milli> ms_double = t2 - t1;
+        printf("Calculated for: %fms\n", ms_double.count());
     }
 done:
     Pa_Terminate();
