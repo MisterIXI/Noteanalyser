@@ -32,7 +32,6 @@ SAMPLE *retrieveResults()
     err = Pa_CloseStream(stream);
     if (err != paNoError)
         cleanupPAAndExit("Error with closing the stream!");
-    printf("Result pointer")
     return data.recordedSamples;
 }
 void resetPA()

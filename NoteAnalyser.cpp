@@ -118,6 +118,62 @@ void printNotes(bool notesToPrint[])
     else
         printf("No Notes recognized!");
 }
+
+/**
+ * @brief Finds the nearest not 0 entry in the given array.
+ *
+ * @param array Array to search the new entry in
+ * @param findIndex The start index from where to start the search
+ * @param arraySize The size of the given array to avoid OOB Errors
+ * @return The index of the nearest not 0 entry of the Array. -1 if nothing is found.
+ */
+int findPeak(double *array, int findIndex, int arraySize)
+{
+    // increase searchDistance if Point is in higher Hz territories to account for increasing variability
+    int maxDistance = PEAK_MAX_SEARCH_DISTANCE + PEAK_SEARCH_DISTANCE_INCREASE * (findIndex / PEAK_SEARCH_INCREASE_STEPSIZE);
+    if (array[findIndex] != 0)
+        return findIndex;
+    // search for the nearest not null entry in the filtered peakArray
+    for (int i = 0; i < maxDistance; i++)
+    {
+        if (findIndex + i < arraySize)
+            if (array[findIndex + i] != 0)
+                return findIndex + i;
+        if (findIndex - i >= 0)
+            if (array[findIndex - i] != 0)
+                return findIndex - i;
+    }
+    return -1;
+}
+
+void removeOvertones(double *array, int startIndex)
+{
+    double currStrength = array[startIndex] * 0.9;
+    int i = startIndex * 2;
+    while (i < resultSize && i / NUM_SECONDS < GRAPHING_MAX_FREQ)
+    {
+        // use findPeak() to account for slight variations in Peaks to not miss the overtone
+        int actualPos = findPeak(array, i, resultSize);
+        if (actualPos != -1)
+        {
+            double result = array[actualPos] - currStrength;
+            if (result < 0)
+                result = 0;
+            printf("i: %d | actualPos: %d | OT removed at %dHz: %g -> %g\n", i, actualPos, actualPos * 2, array[actualPos], result);
+            array[actualPos] = result;
+        }
+        else
+        {
+            printf("skipped a peak at %dHz\n", i * 2);
+        }
+
+        i = i + startIndex;
+        currStrength = currStrength * 0.7;
+        if (currStrength < 30)
+            currStrength = 30;
+    }
+}
+
 /**
  * @brief Filter input to only peaks to output by comparing left and right of values.
  *
@@ -147,9 +203,6 @@ void filterPeaks(double *toFilter, double *output, int arraySize)
             }
         }
     }
-    int PEAK_DIFFERENCE_PER_STEP = 2;
-    int PEAK_DIFFERENCE_OFFSET = 5;
-    int PEAK_DISTANCE = 30;
 
     bool filtered = true;
     while (filtered)
@@ -180,7 +233,7 @@ void filterPeaks(double *toFilter, double *output, int arraySize)
                             {
                                 output[lastPeak] = 0;
                                 filtered = true;
-                                //printf("%d - %d = %d\n", currentPeak, lastPeak, currentPeak - lastPeak);
+                                // printf("%d - %d = %d\n", currentPeak, lastPeak, currentPeak - lastPeak);
                             }
                         }
                     }
@@ -194,37 +247,21 @@ void filterPeaks(double *toFilter, double *output, int arraySize)
             }
         }
     }
-}
-
-/**
- * @brief Finds the nearest not 0 entry in the given array.
- *
- * @param array Array to search the new entry in
- * @param findIndex The start index from where to start the search
- * @param maxDistance The maximum distance it should search from startpoint (findIndex - maxDistance && findIndex + maxDistance)
- * @param arraySize The size of the given array to avoid OOB Errors
- * @return The index of the nearest not 0 entry of the Array. -1 if nothing is found.
- */
-int findPeak(double *array, int findIndex, int maxDistance, int arraySize)
-{
-    if (array[findIndex] != 0)
-        return findIndex;
-    // search for the nearest not null entry in the filtered peakArray
-    for (int i = 0; i < maxDistance; i++)
+    int peakCount = 0;
+    for (int i = 0; i < resultSize; i++)
     {
-        if (findIndex + i < arraySize)
-            if (array[findIndex + i] != 0)
-                return findIndex + i;
-        if (findIndex - i >= 0)
-            if (array[findIndex - i] != 0)
-                return findIndex - i;
+        if (output[i] > 0)
+            peakCount++;
     }
-    return -1;
-}
-
-void removeOvertones(double *array, int startFrequency, int startIndex)
-{
-    // todo: implement
+    for (int i = 0; i < resultSize; i++)
+    {
+        if (output[i] > 0 && i / NUM_SECONDS > GRAPHING_MIN_FREQ)
+        {
+            removeOvertones(output, i);
+        }
+    }
+    if (peakCount > 4)
+        stop = 1;
 }
 
 bool cmdOptionExists(char **begin, char **end, const std::string &option)
@@ -333,8 +370,16 @@ int main(int argc, char *argv[])
         fftw_execute(plan);
         for (i = 0; i < resultSize; i++)
         {
-            double mag = sqrt(out[i][0] * out[i][0] + out[i][1] * out[i][1]);
-            results[i] += mag;
+            if (i / NUM_SECONDS)
+            {
+                double mag = sqrt(out[i][0] * out[i][0] + out[i][1] * out[i][1]);
+                results[i] += mag;
+            }
+            else
+            {
+                // zero out result if it's out of the defined scope
+                results[i] = 0;
+            }
         }
 
         highestFrequency = 0;
