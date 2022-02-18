@@ -274,6 +274,42 @@ void printNotes(bool notesToPrint[])
     else
         printf("No Notes recognized!");
 }
+
+ws2811_t ledstrip =
+    {
+        .freq = WS2811_TARGET_FREQ,
+        .dmanum = 10,
+        .channel =
+            {
+                [0] =
+                    {
+                        .gpionum = 12,
+                        .invert = 0,
+                        .count = 96,
+                        .strip_type = WS2811_STRIP_GBR,
+                        .brightness = 255,
+                    },
+            },
+};
+
+void renderLEDs(int note, double strength) // 0 < note < 108 (12 notes in 9 octaves) | 10 < strength < 600
+{
+    int ledColumn = note % 12;               // ideally 0 to 11
+    int numLEDs = int((strength / 600) * 8); // calculates number of LEDs according to strength
+
+    // clear LEDs
+    for (int i = 0; i < 96; i++)
+    {
+        ledstrip.channel[0].leds[i] = 0;
+    }
+    // activate the right LEDs
+    for (int i = (ledColumn * 8) + (8 - numLEDs); i < (ledColumn + 1) * 8; i++)
+    {
+        ledstrip.channel[0].leds[i] = 0x00200000; // should be red
+    }
+    ws2811_render(&ledstrip);
+}
+
 /**
  * @brief Filter input to only peaks to output by comparing left and right of values.
  *
