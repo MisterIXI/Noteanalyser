@@ -178,12 +178,14 @@ void removeOvertones(double *array, int startIndex)
             double result = array[actualPos] - currStrength;
             if (result < VALUE_CUTOFF)
                 result = 0;
-            // printf("i: %d | actualPos: %d | OT removed at %dHz: %g -> %g\n", i, actualPos, actualPos * 2, array[actualPos], result);
+            if (DEBUG_OVERTONE_VERBOSE)
+                printf("i: %d | actualPos: %d | OT removed at %dHz: %g -> %g\n", i, actualPos, actualPos * 2, array[actualPos], result);
             array[actualPos] = result;
         }
         else
         {
-            // printf("skipped an OT at %gHz\n", calcHz(i));
+            if (DEBUG_OVERTONE_VERBOSE)
+                printf("skipped an OT at %gHz\n", calcHz(i));
         }
 
         i = i + startIndex + offset;
@@ -363,8 +365,7 @@ int main(int argc, char *argv[])
         using std::chrono::high_resolution_clock;
         using std::chrono::milliseconds;
         auto t1 = high_resolution_clock::now();
-        // reset arrays and variables
-        fill(noteHits, noteHits + (OCTAVES * NOTES), 0);
+
         for (int i = 0; i < numSamples; i++)
         {
             in[i][0] = 0;
@@ -464,27 +465,33 @@ int main(int argc, char *argv[])
                 printNote(-1);
         }
 
-        int peakCount = 0;
-        for (int i = 0; i < resultSize; i++)
+        if (DEBUG_STOP_AFTER_HIT)
         {
-            if (filteredResults[i] > 0)
-                peakCount++;
+            int peakCount = 0;
+            for (int i = 0; i < resultSize; i++)
+            {
+                if (filteredResults[i] > 0)
+                    peakCount++;
+            }
+            if (peakCount > 1)
+                stop = 1;
         }
-        if (peakCount > 1)
-            stop = 1;
 
-        // reset resultarrays
-        for (int i = 0; i < resultSize; i++)
-        {
-            results[i] = 0;
-            filteredResults[i] = 0;
-        }
         firstRun = false;
 
+        // reset arrays and variables
+        fill(noteHits, noteHits + (OCTAVES * NOTES), 0);
+        fill(results, results + resultSize, 0);
+        fill(filteredResults, filteredResults + resultSize, 0);
+
         auto t2 = high_resolution_clock::now();
-        duration<double, std::milli> ms_double = t2 - t1;
-        printf("Calculated for: %fms\n", ms_double.count());
-        if (!stop)
-            system("clear");
+        if (DEBUG_MEASURE_TIME)
+        {
+            duration<double, std::milli> ms_double = t2 - t1;
+            printf("Calculated for: %fms\n", ms_double.count());
+        }
+        if (DEBUG_CLEAR_TERMINAL)
+            if (!stop)
+                system("clear");
     }
 }

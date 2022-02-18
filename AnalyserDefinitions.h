@@ -2,7 +2,6 @@
 // basic Parameters
 #define OCTAVES 9
 #define NOTES 12
-
 #define VALUE_CUTOFF 15
 
 // cutoff at B3 since the Noisefloor makes it difficult to correctly identify the peaks up to ~250Hz
@@ -34,5 +33,14 @@ typedef float SAMPLE;
 #define PRINTF_S_FORMAT "%.8f"
 
 #define DITHER_FLAG (0)
-
 #define WRITE_TO_FILE (0)
+
+//debugging flags
+// Outputs messages what happens to the overtone calculation
+#define DEBUG_OVERTONE_VERBOSE false
+// Exit program gracefully after any Note was found
+#define DEBUG_STOP_AFTER_HIT false
+// Clear terminal after every iteration
+#define DEBUG_CLEAR_TERMINAL false
+// Measure time per loop
+#define DEBUG_MEASURE_TIME true
