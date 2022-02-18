@@ -7,7 +7,7 @@
 #include <fstream>
 #include <vector>
 
-//#include <chrono>
+#include <chrono>
 
 #include <portaudio.h>
 #include <fftw3.h>
@@ -15,64 +15,22 @@
 
 #include "i2cLEDScreen.h"
 
-/* #define SAMPLE_RATE  (17932) // Test failure to open with this value. */
-#define SAMPLE_RATE (44100)
-#define FRAMES_PER_BUFFER (512)
-#define NUM_SECONDS (0.5)
-#define NUM_CHANNELS (2)
+#include "AnalyserDefinitions.h"
+
+#include "PortaudioRecording.h"
+using namespace std;
+
 /* #define DITHER_FLAG     (paDitherOff) */
-#define DITHER_FLAG (0)
-
-#define ITERATION_SIZE (1)
-
-#define WRITE_TO_FILE (0)
-
-/* Select sample format. */
-#if 1
-#define PA_SAMPLE_TYPE paFloat32
-typedef float SAMPLE;
-#define SAMPLE_SILENCE (0.0f)
-#define PRINTF_S_FORMAT "%.8f"
-#elif 1
-#define PA_SAMPLE_TYPE paInt16
-typedef short SAMPLE;
-#define SAMPLE_SILENCE (0)
-#define PRINTF_S_FORMAT "%d"
-#elif 0
-#define PA_SAMPLE_TYPE paInt8
-typedef char SAMPLE;
-#define SAMPLE_SILENCE (0)
-#define PRINTF_S_FORMAT "%d"
-#else
-#define PA_SAMPLE_TYPE paUInt8
-typedef unsigned char SAMPLE;
-#define SAMPLE_SILENCE (128)
-#define PRINTF_S_FORMAT "%d"
-#endif
-
-#define OCTAVES 9
-#define NOTES 12
 
 // default without LCD
 bool useScreen = false;
 bool multipleNotes = false;
 bool graphOutputs = true;
 
-#define GRAPHING_MIN_FREQ 32
-#define GRAPHING_MAX_FREQ 4000
-
 double noteFrequencies[OCTAVES * NOTES] = {0};
 double notePeaks[OCTAVES * NOTES] = {0};
 bool noteHits[OCTAVES * NOTES] = {0};
 std::string noteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"};
-
-using namespace std;
-typedef struct
-{
-    int frameIndex; /* Index into sample array. */
-    int maxFrameIndex;
-    SAMPLE *recordedSamples;
-} paTestData;
 
 struct mapping_t
 {
@@ -82,123 +40,10 @@ struct mapping_t
 
 volatile sig_atomic_t stop;
 
-void inthand(int signum)
+void intHandler(int signum)
 {
     stop = 1;
     printf("Programm is beeing shutdown, please await the last iteration...\n");
-}
-
-/* This routine will be called by the PortAudio engine when audio is needed.
-** It may be called at interrupt level on some machines so don't do anything
-** that could mess up the system like calling malloc() or free().
-*/
-static int recordCallback(const void *inputBuffer, void *outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo *timeInfo, PaStreamCallbackFlags statusFlags, void *userData)
-{
-    paTestData *data = (paTestData *)userData;
-    const SAMPLE *rptr = (const SAMPLE *)inputBuffer;
-    SAMPLE *wptr = &data->recordedSamples[data->frameIndex * NUM_CHANNELS];
-    long framesToCalc;
-    long i;
-    int finished;
-    unsigned long framesLeft = data->maxFrameIndex - data->frameIndex;
-
-    (void)outputBuffer; /* Prevent unused variable warnings. */
-    (void)timeInfo;
-    (void)statusFlags;
-    (void)userData;
-
-    if (framesLeft < framesPerBuffer)
-    {
-        framesToCalc = framesLeft;
-        finished = paComplete;
-    }
-    else
-    {
-        framesToCalc = framesPerBuffer;
-        finished = paContinue;
-    }
-
-    if (inputBuffer == NULL)
-    {
-        for (i = 0; i < framesToCalc; i++)
-        {
-            *wptr++ = SAMPLE_SILENCE; /* left */
-
-            if (NUM_CHANNELS == 2)
-                *wptr++ = SAMPLE_SILENCE; /* right */
-        }
-    }
-    else
-    {
-        for (i = 0; i < framesToCalc; i++)
-        {
-            *wptr++ = *rptr++; /* left */
-
-            if (NUM_CHANNELS == 2)
-                *wptr++ = *rptr++; /* right */
-        }
-    }
-
-    data->frameIndex += framesToCalc;
-
-    return finished;
-}
-
-/* This routine will be called by the PortAudio engine when audio is needed.
-** It may be called at interrupt level on some machines so don't do anything
-** that could mess up the system like calling malloc() or free().
-*/
-static int playCallback(const void *inputBuffer, void *outputBuffer, unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo *timeInfo, PaStreamCallbackFlags statusFlags, void *userData)
-{
-    paTestData *data = (paTestData *)userData;
-    SAMPLE *rptr = &data->recordedSamples[data->frameIndex * NUM_CHANNELS];
-    SAMPLE *wptr = (SAMPLE *)outputBuffer;
-    unsigned int i;
-    int finished;
-    unsigned int framesLeft = data->maxFrameIndex - data->frameIndex;
-
-    (void)inputBuffer; /* Prevent unused variable warnings. */
-    (void)timeInfo;
-    (void)statusFlags;
-    (void)userData;
-
-    if (framesLeft < framesPerBuffer)
-    {
-        /* final buffer... */
-        for (i = 0; i < framesLeft; i++)
-        {
-            *wptr++ = *rptr++; /* left */
-
-            if (NUM_CHANNELS == 2)
-                *wptr++ = *rptr++; /* right */
-        }
-
-        for (; i < framesPerBuffer; i++)
-        {
-            *wptr++ = 0; /* left */
-
-            if (NUM_CHANNELS == 2)
-                *wptr++ = 0; /* right */
-        }
-
-        data->frameIndex += framesLeft;
-        finished = paComplete;
-    }
-    else
-    {
-        for (i = 0; i < framesPerBuffer; i++)
-        {
-            *wptr++ = *rptr++; /* left */
-
-            if (NUM_CHANNELS == 2)
-                *wptr++ = *rptr++; /* right */
-        }
-
-        data->frameIndex += framesPerBuffer;
-        finished = paContinue;
-    }
-
-    return finished;
 }
 
 void initializeNoteFrequencies()
@@ -273,6 +118,62 @@ void printNotes(bool notesToPrint[])
     else
         printf("No Notes recognized!");
 }
+
+/**
+ * @brief Finds the nearest not 0 entry in the given array.
+ *
+ * @param array Array to search the new entry in
+ * @param findIndex The start index from where to start the search
+ * @param arraySize The size of the given array to avoid OOB Errors
+ * @return The index of the nearest not 0 entry of the Array. -1 if nothing is found.
+ */
+int findPeak(double *array, int findIndex, int arraySize)
+{
+    // increase searchDistance if Point is in higher Hz territories to account for increasing variability
+    int maxDistance = PEAK_MAX_SEARCH_DISTANCE + PEAK_SEARCH_DISTANCE_INCREASE * (findIndex / PEAK_SEARCH_INCREASE_STEPSIZE);
+    if (array[findIndex] != 0)
+        return findIndex;
+    // search for the nearest not null entry in the filtered peakArray
+    for (int i = 0; i < maxDistance; i++)
+    {
+        if (findIndex + i < arraySize)
+            if (array[findIndex + i] != 0)
+                return findIndex + i;
+        if (findIndex - i >= 0)
+            if (array[findIndex - i] != 0)
+                return findIndex - i;
+    }
+    return -1;
+}
+
+void removeOvertones(double *array, int startIndex)
+{
+    double currStrength = array[startIndex] * 0.9;
+    int i = startIndex * 2;
+    while (i < resultSize && i / NUM_SECONDS < GRAPHING_MAX_FREQ)
+    {
+        // use findPeak() to account for slight variations in Peaks to not miss the overtone
+        int actualPos = findPeak(array, i, resultSize);
+        if (actualPos != -1)
+        {
+            double result = array[actualPos] - currStrength;
+            if (result < 0)
+                result = 0;
+            printf("i: %d | actualPos: %d | OT removed at %dHz: %g -> %g\n", i, actualPos, actualPos * 2, array[actualPos], result);
+            array[actualPos] = result;
+        }
+        else
+        {
+            printf("skipped a peak at %dHz\n", i * 2);
+        }
+
+        i = i + startIndex;
+        currStrength = currStrength * 0.7;
+        if (currStrength < 30)
+            currStrength = 30;
+    }
+}
+
 /**
  * @brief Filter input to only peaks to output by comparing left and right of values.
  *
@@ -282,31 +183,85 @@ void printNotes(bool notesToPrint[])
  */
 void filterPeaks(double *toFilter, double *output, int arraySize)
 {
-    int VALUE_CUTOFF = 3;
-    int cooldown = 0;
-    double oldValue = 0;
-    double lastValue = toFilter[0];
-    // go through the array
-    for (int i = 1; i < arraySize; i++)
+    double lastValue = 0;
+    double currentValue = 0;
+    double nextValue = 0;
+    // go through the array (excluding first and last place for comparison reasons)
+    for (int i = 1; i < arraySize - 1; i++)
     {
+        currentValue = toFilter[i];
         // throw away everything under constant
-        if (toFilter[i] > VALUE_CUTOFF)
+        if (currentValue > VALUE_CUTOFF)
         {
+            lastValue = toFilter[i - 1];
+            nextValue = toFilter[i + 1];
             // check if last value was lokal peak
-            if (lastValue > oldValue && lastValue > toFilter[i])
+            if (currentValue > lastValue && currentValue > nextValue)
             {
-                // try to look ahead one more to try and avoid noise || let second last value pass for free
-                if ((i + 1 < arraySize && lastValue > toFilter[i + 1]) || i + 1 == arraySize - 1)
+                // remember spike
+                output[i] = currentValue;
+            }
+        }
+    }
+
+    bool filtered = true;
+    while (filtered)
+    {
+        filtered = false;
+        int lastPeak = -1;
+        int currentPeak = -1;
+        int nextPeak = -1;
+        // go through the output and kick potential noise peaks
+        for (int i = 0; i < arraySize; i++)
+        {
+            if (output[i] > 0)
+            {
+                lastPeak = currentPeak;
+                currentPeak = nextPeak;
+                nextPeak = i;
+                // check if at least two values are set and if currentPeak was deleted
+                if (currentPeak != -1 && output[currentPeak] > 0)
                 {
-                    // remember spike
-                    output[i - 1] = lastValue;
+                    // check behind (only if all three values have been set)
+                    if (lastPeak != -1)
+                    {
+                        // check if lastPeak was deleted
+                        if (output[lastPeak] > 0)
+                        {
+                            // check behind only if difference in peakHeight ist > PEAK_DIFFERENCE_PER_STEP*distance and both indices are closer together than PEAK_DISTANCE
+                            if (output[currentPeak] - output[lastPeak] > PEAK_DIFFERENCE_PER_STEP * (currentPeak - lastPeak) + PEAK_DIFFERENCE_OFFSET && currentPeak - lastPeak < PEAK_DISTANCE)
+                            {
+                                output[lastPeak] = 0;
+                                filtered = true;
+                                // printf("%d - %d = %d\n", currentPeak, lastPeak, currentPeak - lastPeak);
+                            }
+                        }
+                    }
+                    // check forward
+                    if (output[currentPeak] - output[nextPeak] > PEAK_DIFFERENCE_PER_STEP * (nextPeak - currentPeak) + PEAK_DIFFERENCE_OFFSET && nextPeak - currentPeak < PEAK_DISTANCE)
+                    {
+                        output[nextPeak] = 0;
+                        filtered = true;
+                    }
                 }
             }
         }
-        // advance comparison values
-        oldValue = lastValue;
-        lastValue = toFilter[i];
     }
+    int peakCount = 0;
+    for (int i = 0; i < resultSize; i++)
+    {
+        if (output[i] > 0)
+            peakCount++;
+    }
+    for (int i = 0; i < resultSize; i++)
+    {
+        if (output[i] > 0 && i / NUM_SECONDS > GRAPHING_MIN_FREQ)
+        {
+            removeOvertones(output, i);
+        }
+    }
+    if (peakCount > 4)
+        stop = 1;
 }
 
 bool cmdOptionExists(char **begin, char **end, const std::string &option)
@@ -352,32 +307,23 @@ double correctValue(int frequency, double value)
 }
 
 /*******************************************************************/
-int main(int argc, char *argv[]);
 int main(int argc, char *argv[])
 {
-    PaStreamParameters inputParameters, outputParameters;
-    PaStream *stream;
-    PaError err = paNoError;
-    paTestData data;
+
     int i;
-    int totalFrames;
-    int numSamples;
-    int numBytes;
-    SAMPLE max, val;
+
     double average;
     double analyzeMax = 0;
     int highestFrequency = 0;
     double highestPeak = 0;
     int highestFrequencyIndex = 0;
-    int stepSize;
-    data.maxFrameIndex = totalFrames = NUM_SECONDS * SAMPLE_RATE; /* Record for a few seconds. */
-    numSamples = totalFrames * NUM_CHANNELS;
-    numBytes = numSamples * sizeof(SAMPLE);
-    data.recordedSamples = (SAMPLE *)malloc(numBytes); /* From now on, recordedSamples is initialised. */
-    stepSize = numSamples / ITERATION_SIZE;
-    double results[stepSize] = {0};
+
+    // results only need half the samples since we only look at one channel
+    double results[numSamples / NUM_CHANNELS] = {0};
+    double filteredResults[numSamples / NUM_CHANNELS] = {0};
     bool firstRun = true;
     ofstream plotFile;
+    ofstream plotFileFiltered;
     initializeNoteFrequencies();
     readCorrectionValues();
     if (cmdOptionExists(argv, argv + argc, "-L"))
@@ -387,128 +333,58 @@ int main(int argc, char *argv[])
     }
     else
         printf("Call with \"-L\" to use i2cLCD\n");
-    fflush(stdout);
 
-    fftw_complex in[stepSize];
-    fftw_complex out[stepSize];
-    fflush(stdout);
-    fftw_plan plan = fftw_plan_dft_1d(stepSize, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
+    fftw_complex in[numSamples];
+    fftw_complex out[numSamples];
+    fftw_plan plan = fftw_plan_dft_1d(numSamples, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
 
-    if (data.recordedSamples == NULL)
-    {
-        printf("Could not allocate record array.\n");
-        goto done;
-    }
+    initializePA();
+    startRecording();
 
     // while loop until ctrl+c is pressed
-    signal(SIGINT, inthand);
+    struct sigaction act;
+    act.sa_handler = intHandler;
+    sigaction(SIGINT, &act, NULL);
     while (!stop)
     {
-        // using std::chrono::high_resolution_clock;
-        // using std::chrono::duration_cast;
-        // using std::chrono::duration;
-        // using std::chrono::milliseconds;
-        // auto t1 = high_resolution_clock::now();
+        using std::chrono::duration;
+        using std::chrono::duration_cast;
+        using std::chrono::high_resolution_clock;
+        using std::chrono::milliseconds;
+        auto t1 = high_resolution_clock::now();
         // reset arrays and variables
         fill(notePeaks, notePeaks + (OCTAVES + NOTES), 0);
-        data.frameIndex = 0;
-        fill(data.recordedSamples, data.recordedSamples + numSamples, 0);
 
-        // re route stderr to hide ALSA errors that cannot easily be disabled
-        // see: https://stackoverflow.com/questions/24778998/how-to-disable-or-re-route-alsa-lib-logging
-        freopen("/dev/null", "w", stderr);
-        err = Pa_Initialize();
-        freopen("/dev/tty", "w", stderr);
-
-        if (err != paNoError)
-            goto done;
-
-        inputParameters.device = Pa_GetDefaultInputDevice(); /* default input device */
-
-        if (inputParameters.device == paNoDevice)
+        // blocking until  it's done recording
+        SAMPLE *paData = retrieveResults();
+        // copy results in working array for FFTW
+        for (int i = 0; i < numSamples; i++)
         {
-            fprintf(stderr, "Error: No default input device.\n");
-            goto done;
+            in[i][0] = paData[i];
+            in[i][1] = 0;
         }
+        // let PA record while the calculations are run
+        startRecording();
 
-        inputParameters.channelCount = NUM_CHANNELS; /* stereo input */
-        inputParameters.sampleFormat = PA_SAMPLE_TYPE;
-        inputParameters.suggestedLatency = Pa_GetDeviceInfo(inputParameters.device)->defaultLowInputLatency;
-        inputParameters.hostApiSpecificStreamInfo = NULL;
-
-        /* Record some audio. -------------------------------------------- */
-        err = Pa_OpenStream(&stream, &inputParameters, NULL, SAMPLE_RATE, FRAMES_PER_BUFFER, paClipOff, recordCallback, &data);
-
-        if (err != paNoError)
-            goto done;
-
-        err = Pa_StartStream(stream);
-        if (err != paNoError)
-            goto done;
-
-        // printf("=== Now recording!! ...");
-        fflush(stdout);
-
-        while ((err = Pa_IsStreamActive(stream)) == 1)
+        // execute FFTW on data
+        fftw_execute(plan);
+        for (i = 0; i < resultSize; i++)
         {
-            // printf("Waiting for pa!\n");
-            Pa_Sleep(1100 * NUM_SECONDS);
-            // printf("index = %d\n", data.frameIndex);
-
-            fflush(stdout);
-        }
-
-        if (err < 0)
-            goto done;
-
-        err = Pa_CloseStream(stream);
-        // printf("  Done recording!! ===\n");
-        if (err != paNoError)
-            goto done;
-
-        /* Measure maximum peak amplitude. */
-        max = 0;
-        average = 0.0;
-        // for (int i = 0; i < numSamples; i++)
-        // {
-        //    printf("%g\n", data.recordedSamples[i]);
-        // }
-
-        for (int n = 1; n <= ITERATION_SIZE; n++)
-        {
-            for (i = stepSize * (n - 1); i < stepSize * n; i++)
-            {
-                val = data.recordedSamples[i];
-                if (val < 0)
-                    val = -val; /* ABS */
-
-                if (val > max)
-                {
-                    max = val;
-                }
-
-                average += val;
-
-                in[i - (stepSize * (n - 1))][0] = data.recordedSamples[i];
-                in[i - (stepSize * (n - 1))][1] = 0;
-            }
-
-            fftw_execute(plan);
-
-            for (i = 0; i < stepSize; i++)
+            if (i / NUM_SECONDS)
             {
                 double mag = sqrt(out[i][0] * out[i][0] + out[i][1] * out[i][1]);
                 results[i] += mag;
             }
+            else
+            {
+                // zero out result if it's out of the defined scope
+                results[i] = 0;
+            }
         }
-        // printf("\n");
 
-        // printf("=================================\n");
-        // printf("fftw\n");
         highestFrequency = 0;
         highestFrequencyIndex = 0;
         highestPeak = 0;
-        plotFile.open("plotData");
 
         // reset noteHits
         for (int i = 0; i < OCTAVES * NOTES; i++)
@@ -516,16 +392,20 @@ int main(int argc, char *argv[])
             noteHits[i] = false;
         }
 
-        // process results
-        for (i = 0; i < stepSize / NUM_CHANNELS; i++)
+        // process results only to half since it's mirrored at the middle from the 2 Channels
+        for (i = 0; i < resultSize; i++)
         {
-            int currFrequency = i / NUM_SECONDS * ITERATION_SIZE;
-            results[i] = results[i] / ITERATION_SIZE;
             results[i] = correctValue(i, results[i]);
+        }
+        filterPeaks(results, filteredResults, resultSize);
+        for (i = 0; i < resultSize; i++)
+        {
+            int currFrequency = i / NUM_SECONDS;
+            // find note
             if (currFrequency > GRAPHING_MIN_FREQ && currFrequency < GRAPHING_MAX_FREQ)
                 if (multipleNotes)
                 {
-                    if (results[i] > 3)
+                    if (results[i] > VALUE_CUTOFF)
                         noteHits[calculateNote(i)] = true;
                 }
                 else
@@ -536,18 +416,33 @@ int main(int argc, char *argv[])
                         highestFrequencyIndex = i;
                     }
                 }
-            if (graphOutputs && currFrequency > GRAPHING_MIN_FREQ && currFrequency < GRAPHING_MAX_FREQ)
-            {
-                plotFile << currFrequency << " " << results[i] << "\n";
-            }
-            // printf("%g\n", results[i]);
         }
-        // printf("=================================\n");
-        plotFile.close();
-        if (!firstRun && graphOutputs)
-            system("gnuplot oneTimeGnuPlot");
-        highestFrequency = highestFrequencyIndex / NUM_SECONDS * ITERATION_SIZE;
+        // output data to plotfiles if flag was set
+        if (graphOutputs)
+        {
+            plotFile.open("plotData");
+            plotFileFiltered.open("plotDataFiltered");
+            for (i = 0; i < resultSize; i++)
+            {
+                int currFrequency = i / NUM_SECONDS;
+                if (graphOutputs && currFrequency > GRAPHING_MIN_FREQ && currFrequency < GRAPHING_MAX_FREQ)
+                {
+                    plotFile << currFrequency << " " << results[i] << "\n";
+                    plotFileFiltered << currFrequency << " " << filteredResults[i] << "\n";
+                }
+            }
+            plotFile.close();
+            plotFileFiltered.close();
+            if (!firstRun)
+            {
+                system("gnuplot oneTimeGnuPlot");
+                system("gnuplot oneTimeGnuPlotFiltered");
+            }
+        }
+
+        highestFrequency = highestFrequencyIndex / NUM_SECONDS;
         printf("Frequency peak at: %d\n", highestFrequency);
+
         if (multipleNotes)
         {
             calculateNotes();
@@ -555,7 +450,7 @@ int main(int argc, char *argv[])
         }
         else
         {
-            if (highestPeak > 10)
+            if (highestPeak > VALUE_CUTOFF)
             {
 
                 printNote(calculateNote(highestFrequency));
@@ -564,29 +459,16 @@ int main(int argc, char *argv[])
             else
                 printNote(-1);
         }
-        for (int i = 0; i < stepSize; i++)
+        // reset resultarrays
+        for (int i = 0; i < resultSize; i++)
         {
             results[i] = 0;
+            filteredResults[i] = 0;
         }
         firstRun = false;
-        // auto t2 = high_resolution_clock::now();
-        // duration<double, std::milli> ms_double = t2 - t1;
-        // printf("Calculated for: %fms\n", ms_double.count());
-    }
-done:
-    Pa_Terminate();
-    if (plotFile.is_open())
-        plotFile.close();
-    if (data.recordedSamples)
-        free(data.recordedSamples);
 
-    if (err != paNoError)
-    {
-        fprintf(stderr, "An error occured while using the portaudio stream\n");
-        fprintf(stderr, "Error number: %d\n", err);
-        fprintf(stderr, "Error message: %s\n", Pa_GetErrorText(err));
-        err = 1; /* Always return 0 or 1, but no other return codes. */
+        auto t2 = high_resolution_clock::now();
+        duration<double, std::milli> ms_double = t2 - t1;
+        printf("Calculated for: %fms\n", ms_double.count());
     }
-
-    return err;
 }
