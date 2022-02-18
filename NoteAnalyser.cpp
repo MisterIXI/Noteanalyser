@@ -24,11 +24,10 @@ using namespace std;
 
 // default without LCD
 bool useScreen = false;
-bool multipleNotes = false;
+bool multipleNotes = true;
 bool graphOutputs = true;
 
 double noteFrequencies[OCTAVES * NOTES] = {0};
-double notePeaks[OCTAVES * NOTES] = {0};
 bool noteHits[OCTAVES * NOTES] = {0};
 std::string noteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"};
 
@@ -96,9 +95,27 @@ void printNote(int note)
         printToScreen(output.str(), 1);
 }
 
-// todo: implement multiple note calculation
-void calculateNotes()
+/**
+ * @brief Calculates every Note in the resultArray that has a Value above the cutoff and notes it in the noteHits[] Array.
+ *
+ * @param resultArray Input Array for the note search. Expected to be filtered with only values at the notes.
+ */
+void calculateNotes(double *resultArray)
 {
+    for (int i = 0; i < resultSize; i++)
+    {
+        if (resultArray[i] > VALUE_CUTOFF)
+        {
+            int note = calculateNote(calcHz(i));
+            if (note == -1)
+            {
+                printf("Error while calculating Notes!");
+                stop = 1;
+                return;
+            }
+            noteHits[note] = true;
+        }
+    }
 }
 
 void printNotes(bool notesToPrint[])
@@ -110,11 +127,12 @@ void printNotes(bool notesToPrint[])
         if (notesToPrint[i])
         {
             recognizedSomething = true;
-            output << noteNames[i % 12].c_str() << i / 12 << " ";
+            output << noteNames[i % 12].c_str() << i / 12 << "|" << noteFrequencies[i] << "Hz"
+                   << " ";
         }
     }
     if (recognizedSomething)
-        printf("Notes recognized: %s\n", output.str().c_str());
+        printf("Notes recognized: \n%s\n", output.str().c_str());
     else
         printf("No Notes recognized!");
 }
@@ -148,26 +166,29 @@ int findPeak(double *array, int findIndex, int arraySize)
 
 void removeOvertones(double *array, int startIndex)
 {
+    int offset = GRAPHING_MIN_FREQ * NUM_SECONDS;
     double currStrength = array[startIndex] * 0.9;
-    int i = startIndex * 2;
-    while (i < resultSize && i / NUM_SECONDS < GRAPHING_MAX_FREQ)
+    int i = startIndex + (startIndex + offset);
+    while (i < resultSize)
     {
         // use findPeak() to account for slight variations in Peaks to not miss the overtone
         int actualPos = findPeak(array, i, resultSize);
         if (actualPos != -1)
         {
             double result = array[actualPos] - currStrength;
-            if (result < 0)
+            if (result < VALUE_CUTOFF)
                 result = 0;
-            printf("i: %d | actualPos: %d | OT removed at %dHz: %g -> %g\n", i, actualPos, actualPos * 2, array[actualPos], result);
+            if (DEBUG_OVERTONE_VERBOSE)
+                printf("i: %d | actualPos: %d | OT removed at %dHz: %g -> %g\n", i, actualPos, actualPos * 2, array[actualPos], result);
             array[actualPos] = result;
         }
         else
         {
-            printf("skipped a peak at %dHz\n", i * 2);
+            if (DEBUG_OVERTONE_VERBOSE)
+                printf("skipped an OT at %gHz\n", calcHz(i));
         }
 
-        i = i + startIndex;
+        i = i + startIndex + offset;
         currStrength = currStrength * 0.7;
         if (currStrength < 30)
             currStrength = 30;
@@ -247,21 +268,13 @@ void filterPeaks(double *toFilter, double *output, int arraySize)
             }
         }
     }
-    int peakCount = 0;
     for (int i = 0; i < resultSize; i++)
     {
         if (output[i] > 0)
-            peakCount++;
-    }
-    for (int i = 0; i < resultSize; i++)
-    {
-        if (output[i] > 0 && i / NUM_SECONDS > GRAPHING_MIN_FREQ)
         {
             removeOvertones(output, i);
         }
     }
-    if (peakCount > 4)
-        stop = 1;
 }
 
 bool cmdOptionExists(char **begin, char **end, const std::string &option)
@@ -319,8 +332,8 @@ int main(int argc, char *argv[])
     int highestFrequencyIndex = 0;
 
     // results only need half the samples since we only look at one channel
-    double results[numSamples / NUM_CHANNELS] = {0};
-    double filteredResults[numSamples / NUM_CHANNELS] = {0};
+    double results[resultSize] = {0};
+    double filteredResults[resultSize] = {0};
     bool firstRun = true;
     ofstream plotFile;
     ofstream plotFileFiltered;
@@ -352,8 +365,12 @@ int main(int argc, char *argv[])
         using std::chrono::high_resolution_clock;
         using std::chrono::milliseconds;
         auto t1 = high_resolution_clock::now();
-        // reset arrays and variables
-        fill(notePeaks, notePeaks + (OCTAVES + NOTES), 0);
+
+        for (int i = 0; i < numSamples; i++)
+        {
+            in[i][0] = 0;
+            out[i][0] = 0;
+        }
 
         // blocking until  it's done recording
         SAMPLE *paData = retrieveResults();
@@ -368,51 +385,38 @@ int main(int argc, char *argv[])
 
         // execute FFTW on data
         fftw_execute(plan);
+        int minFreqOffset = GRAPHING_MIN_FREQ * NUM_SECONDS;
         for (i = 0; i < resultSize; i++)
         {
-            if (i / NUM_SECONDS)
-            {
-                double mag = sqrt(out[i][0] * out[i][0] + out[i][1] * out[i][1]);
-                results[i] += mag;
-            }
-            else
-            {
-                // zero out result if it's out of the defined scope
-                results[i] = 0;
-            }
+            double mag = sqrt(out[i + minFreqOffset][0] * out[i + minFreqOffset][0] + out[i + minFreqOffset][1] * out[i + minFreqOffset][1]);
+            results[i] = mag;
         }
 
         highestFrequency = 0;
         highestFrequencyIndex = 0;
         highestPeak = 0;
 
-        // reset noteHits
-        for (int i = 0; i < OCTAVES * NOTES; i++)
-        {
-            noteHits[i] = false;
-        }
-
         // process results only to half since it's mirrored at the middle from the 2 Channels
         for (i = 0; i < resultSize; i++)
         {
-            results[i] = correctValue(i, results[i]);
+            results[i] = correctValue(i + minFreqOffset, results[i]);
         }
         filterPeaks(results, filteredResults, resultSize);
         for (i = 0; i < resultSize; i++)
         {
-            int currFrequency = i / NUM_SECONDS;
+            int currFrequency = calcHz(i);
             // find note
             if (currFrequency > GRAPHING_MIN_FREQ && currFrequency < GRAPHING_MAX_FREQ)
                 if (multipleNotes)
                 {
-                    if (results[i] > VALUE_CUTOFF)
-                        noteHits[calculateNote(i)] = true;
+                    if (filteredResults[i] > VALUE_CUTOFF)
+                        noteHits[calculateNote(currFrequency)] = true;
                 }
                 else
                 {
-                    if (results[i] > highestPeak)
+                    if (filteredResults[i] > highestPeak)
                     {
-                        highestPeak = results[i];
+                        highestPeak = filteredResults[i];
                         highestFrequencyIndex = i;
                     }
                 }
@@ -424,8 +428,9 @@ int main(int argc, char *argv[])
             plotFileFiltered.open("plotDataFiltered");
             for (i = 0; i < resultSize; i++)
             {
-                int currFrequency = i / NUM_SECONDS;
-                if (graphOutputs && currFrequency > GRAPHING_MIN_FREQ && currFrequency < GRAPHING_MAX_FREQ)
+                int currFrequency = calcHz(i);
+                // graphOutputs && currFrequency > GRAPHING_MIN_FREQ &&
+                if (currFrequency < GRAPHING_MAX_FREQ)
                 {
                     plotFile << currFrequency << " " << results[i] << "\n";
                     plotFileFiltered << currFrequency << " " << filteredResults[i] << "\n";
@@ -440,12 +445,12 @@ int main(int argc, char *argv[])
             }
         }
 
-        highestFrequency = highestFrequencyIndex / NUM_SECONDS;
+        highestFrequency = calcHz(highestFrequencyIndex);
         printf("Frequency peak at: %d\n", highestFrequency);
 
         if (multipleNotes)
         {
-            calculateNotes();
+            // calculateNotes(filteredResults);
             printNotes(noteHits);
         }
         else
@@ -459,16 +464,34 @@ int main(int argc, char *argv[])
             else
                 printNote(-1);
         }
-        // reset resultarrays
-        for (int i = 0; i < resultSize; i++)
+
+        if (DEBUG_STOP_AFTER_HIT)
         {
-            results[i] = 0;
-            filteredResults[i] = 0;
+            int peakCount = 0;
+            for (int i = 0; i < resultSize; i++)
+            {
+                if (filteredResults[i] > 0)
+                    peakCount++;
+            }
+            if (peakCount > 1)
+                stop = 1;
         }
+
         firstRun = false;
 
+        // reset arrays and variables
+        fill(noteHits, noteHits + (OCTAVES * NOTES), 0);
+        fill(results, results + resultSize, 0);
+        fill(filteredResults, filteredResults + resultSize, 0);
+
         auto t2 = high_resolution_clock::now();
-        duration<double, std::milli> ms_double = t2 - t1;
-        printf("Calculated for: %fms\n", ms_double.count());
+        if (DEBUG_MEASURE_TIME)
+        {
+            duration<double, std::milli> ms_double = t2 - t1;
+            printf("Calculated for: %fms\n", ms_double.count());
+        }
+        if (DEBUG_CLEAR_TERMINAL)
+            if (!stop)
+                system("clear");
     }
 }
