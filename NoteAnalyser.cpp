@@ -24,9 +24,10 @@ using namespace std;
 /* #define DITHER_FLAG     (paDitherOff) */
 
 // default without LCD
-bool useScreen = false;
-bool multipleNotes = true;
-bool graphOutputs = true;
+bool useScreen = FLAGS_USE_SCREEN;
+bool multipleNotes = FLAGS_MULTIPLE_NOTES;
+bool graphOutputs = FLAGS_GRAPH_OUTPUTS;
+bool useLEDs = FLAGS_USE_LEDS;
 
 double noteFrequencies[OCTAVES * NOTES] = {0};
 bool noteHits[OCTAVES * NOTES] = {0};
@@ -83,7 +84,7 @@ int calculateNote(double frequency)
     return result;
 }
 
-void printNote(int note)
+void printNote(int note, double strength)
 {
     std::stringstream output;
     if (note != -1)
@@ -94,6 +95,8 @@ void printNote(int note)
     printf("%s\n", output.str().c_str());
     if (useScreen)
         printToScreen(output.str(), 1);
+    if(note != -1 && renderLEDs);
+        renderLEDs(note, strength);
 }
 
 void printNotes(bool notesToPrint[])
@@ -477,11 +480,11 @@ int main(int argc, char *argv[])
             if (highestPeak > VALUE_CUTOFF)
             {
 
-                printNote(calculateNote(highestFrequency));
+                printNote(calculateNote(highestFrequency),filteredResults[highestFrequencyIndex]);
                 printf("With a strength of: %f\n", results[highestFrequencyIndex]);
             }
             else
-                printNote(-1);
+                printNote(-1,-1);
         }
 
         if (DEBUG_STOP_AFTER_HIT)
