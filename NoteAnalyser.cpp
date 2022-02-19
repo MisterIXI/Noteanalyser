@@ -132,7 +132,13 @@ ws2811_t ledstrip =
             },
 };
 
-void renderLEDs(int note, double strength) // 0 < note < 108 (12 notes in 9 octaves) | 10 < strength < 600
+/**
+ * @brief Accepts a note and its corresponding strength, then renders said note using the LED-strip.
+ *
+ * @param note the note played (0-108 -> 12 notes in 9 octaves)
+ * @param strength strength of the played note (10-600)
+ */
+void renderLEDs(int note, double strength)
 {
     int ledColumn = note % 12;               // ideally 0 to 11
     int numLEDs = int((strength / 600) * 8); // calculates number of LEDs according to strength
