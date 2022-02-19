@@ -41,8 +41,8 @@ volatile sig_atomic_t stop;
 
 void intHandler(int signum)
 {
-    stop = 1;
-    printf("Programm is beeing shutdown, please await the last iteration...\n");
+    stop = true;
+    printf("\nProgramm is beeing shutdown, please await the last iteration...\n");
 }
 
 void initializeNoteFrequencies()
@@ -93,29 +93,6 @@ void printNote(int note)
     printf("%s\n", output.str().c_str());
     if (useScreen)
         printToScreen(output.str(), 1);
-}
-
-/**
- * @brief Calculates every Note in the resultArray that has a Value above the cutoff and notes it in the noteHits[] Array.
- *
- * @param resultArray Input Array for the note search. Expected to be filtered with only values at the notes.
- */
-void calculateNotes(double *resultArray)
-{
-    for (int i = 0; i < resultSize; i++)
-    {
-        if (resultArray[i] > VALUE_CUTOFF)
-        {
-            int note = calculateNote(calcHz(i));
-            if (note == -1)
-            {
-                printf("Error while calculating Notes!");
-                stop = 1;
-                return;
-            }
-            noteHits[note] = true;
-        }
-    }
 }
 
 void printNotes(bool notesToPrint[])
@@ -473,7 +450,7 @@ int main(int argc, char *argv[])
                 if (filteredResults[i] > 0)
                     peakCount++;
             }
-            if (peakCount > 1)
+            if (peakCount >= 1)
                 stop = 1;
         }
 
