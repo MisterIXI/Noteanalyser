@@ -5,10 +5,10 @@
 #define VALUE_CUTOFF 15
 
 // defaults of flags
-#define FLAGS_USE_SCREEN false;
-#define FLAGS_MULTIPLE_NOTES true;
-#define FLAGS_GRAPH_OUTPUTS true;
-#define FLAGS_USE_LEDS false;
+#define FLAGS_USE_SCREEN false
+#define FLAGS_MULTIPLE_NOTES true
+#define FLAGS_GRAPH_OUTPUTS true
+#define FLAGS_USE_LEDS true
 
 // cutoff at B3 since the Noisefloor makes it difficult to correctly identify the peaks up to ~250Hz
 #define GRAPHING_MIN_FREQ 246

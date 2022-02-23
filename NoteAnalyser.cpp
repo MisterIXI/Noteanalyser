@@ -7,6 +7,8 @@
 #include <fstream>
 #include <vector>
 
+#include <cstring>
+
 #include <chrono>
 
 #include <portaudio.h>
@@ -31,6 +33,7 @@ bool useLEDs = FLAGS_USE_LEDS;
 
 double noteFrequencies[OCTAVES * NOTES] = {0};
 bool noteHits[OCTAVES * NOTES] = {0};
+double noteStrengths[OCTAVES * NOTES] = {0};
 std::string noteNames[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "H"};
 
 struct mapping_t
@@ -84,6 +87,8 @@ int calculateNote(double frequency)
     return result;
 }
 
+void renderLEDs(int note, double strength);
+
 void printNote(int note, double strength)
 {
     std::stringstream output;
@@ -95,7 +100,7 @@ void printNote(int note, double strength)
     printf("%s\n", output.str().c_str());
     if (useScreen)
         printToScreen(output.str(), 1);
-    if(note != -1 && renderLEDs);
+    if (note != -1 && renderLEDs)
         renderLEDs(note, strength);
 }
 
@@ -108,14 +113,29 @@ void printNotes(bool notesToPrint[])
         if (notesToPrint[i])
         {
             recognizedSomething = true;
-            output << noteNames[i % 12].c_str() << i / 12 << "|" << noteFrequencies[i] << "Hz"
-                   << " ";
+            output << noteNames[i % 12].c_str() << i / 12 << " ";
+                   //<< "|" << noteFrequencies[i] << "Hz"
+            if (useLEDs)
+                renderLEDs(i, noteStrengths[i]);
         }
     }
+    if(useScreen)
+        ClrLcd();
     if (recognizedSomething)
+    {
         printf("Notes recognized: \n%s\n", output.str().c_str());
+        if(useScreen)
+        {
+            printToScreen("Notes recognized: ",1);
+            printToScreen(output.str(),2);
+        }
+    }
     else
-        printf("No Notes recognized!");
+    {
+        printf("No Notes recognized!\n");
+        if(useScreen)
+            printToScreen("No Notes recognized!",1);
+    }
 }
 
 ws2811_t ledstrip =
@@ -132,9 +152,26 @@ ws2811_t ledstrip =
                         .strip_type = WS2811_STRIP_GBR,
                         .brightness = 255,
                     },
+                [1] =
+                    {
+                        .gpionum = 0,
+                        .invert = 0,
+                        .count = 0,
+                        .brightness = 0,
+                    },
             },
 };
-
+ws2811_led_t dotcolors[] =
+    {
+        0x00111111, // will probably never happen --> white
+        0x00111111, // will probably never happen --> white
+        0x00111100, // turquoise
+        0x00110000, // blue
+        0x00000011, // red
+        0x00001100, // green
+        0x00111111, // white
+        0x00110011, // purple
+};
 /**
  * @brief Accepts a note and its corresponding strength, then renders said note using the LED-strip.
  *
@@ -143,20 +180,25 @@ ws2811_t ledstrip =
  */
 void renderLEDs(int note, double strength)
 {
-    int ledColumn = note % 12;               // ideally 0 to 11
+    int ledColumn = note % 12; // ideally 0 to 11
+    if (strength > 600)
+        strength = 600;
     int numLEDs = int((strength / 600) * 8); // calculates number of LEDs according to strength
 
+    // activate the right LEDs
+    for (int i = (ledColumn * 8) + (8 - numLEDs); i < (ledColumn + 1) * 8; i++)
+    {
+        ledstrip.channel[0].leds[i] += dotcolors[note / 12];
+    }
+}
+
+void clearLEDS()
+{
     // clear LEDs
     for (int i = 0; i < 96; i++)
     {
         ledstrip.channel[0].leds[i] = 0;
     }
-    // activate the right LEDs
-    for (int i = (ledColumn * 8) + (8 - numLEDs); i < (ledColumn + 1) * 8; i++)
-    {
-        ledstrip.channel[0].leds[i] = 0x00200000; // should be red
-    }
-    ws2811_render(&ledstrip);
 }
 
 /**
@@ -189,7 +231,7 @@ int findPeak(double *array, int findIndex, int arraySize)
 void removeOvertones(double *array, int startIndex)
 {
     int offset = GRAPHING_MIN_FREQ * NUM_SECONDS;
-    double currStrength = array[startIndex] * 0.9;
+    double currStrength = array[startIndex] * 0.7;
     int i = startIndex + (startIndex + offset);
     while (i < resultSize)
     {
@@ -361,13 +403,26 @@ int main(int argc, char *argv[])
     ofstream plotFileFiltered;
     initializeNoteFrequencies();
     readCorrectionValues();
-    if (cmdOptionExists(argv, argv + argc, "-L"))
+    if (cmdOptionExists(argv, argv + argc, "-S"))
     {
         useScreen = 1;
         init_i2c_screen();
     }
     else
-        printf("Call with \"-L\" to use i2cLCD\n");
+        printf("Call with \"-S\" to use i2cLCD screen\n");
+
+    if (cmdOptionExists(argv, argv + argc, "-L") || (FLAGS_USE_LEDS))
+    {
+        useLEDs = true;
+        ws2811_return_t ret;
+        if ((ret = ws2811_init(&ledstrip)) != WS2811_SUCCESS)
+        {
+            fprintf(stderr, "ws2811_init failed: %s\n", ws2811_get_return_t_str(ret));
+            return ret;
+        }
+    }
+    else
+        printf("Call with \"-L\" to use LED rendering\n");
 
     fftw_complex in[numSamples];
     fftw_complex out[numSamples];
@@ -432,7 +487,10 @@ int main(int argc, char *argv[])
                 if (multipleNotes)
                 {
                     if (filteredResults[i] > VALUE_CUTOFF)
+                    {
                         noteHits[calculateNote(currFrequency)] = true;
+                        noteStrengths[calculateNote(currFrequency)] = filteredResults[i];
+                    }
                 }
                 else
                 {
@@ -469,7 +527,8 @@ int main(int argc, char *argv[])
 
         highestFrequency = calcHz(highestFrequencyIndex);
         printf("Frequency peak at: %d\n", highestFrequency);
-
+        if (useLEDs)
+            clearLEDS();
         if (multipleNotes)
         {
             // calculateNotes(filteredResults);
@@ -480,12 +539,14 @@ int main(int argc, char *argv[])
             if (highestPeak > VALUE_CUTOFF)
             {
 
-                printNote(calculateNote(highestFrequency),filteredResults[highestFrequencyIndex]);
+                printNote(calculateNote(highestFrequency), filteredResults[highestFrequencyIndex]);
                 printf("With a strength of: %f\n", results[highestFrequencyIndex]);
             }
             else
-                printNote(-1,-1);
+                printNote(-1, -1);
         }
+        if (useLEDs)
+            ws2811_render(&ledstrip);
 
         if (DEBUG_STOP_AFTER_HIT)
         {
@@ -503,6 +564,7 @@ int main(int argc, char *argv[])
 
         // reset arrays and variables
         fill(noteHits, noteHits + (OCTAVES * NOTES), 0);
+        fill(noteStrengths, noteStrengths + (OCTAVES * NOTES), 0);
         fill(results, results + resultSize, 0);
         fill(filteredResults, filteredResults + resultSize, 0);
 
@@ -515,5 +577,10 @@ int main(int argc, char *argv[])
         if (DEBUG_CLEAR_TERMINAL)
             if (!stop)
                 system("clear");
+    }
+    if (useLEDs)
+    {
+        // clearLEDS();
+        ws2811_render(&ledstrip);
     }
 }
