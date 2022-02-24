@@ -97,9 +97,11 @@ void printNote(int note, double strength)
     else
         output << "No Note recognized!";
 
-    printf("%s\n", output.str().c_str());
     if (useScreen)
         printToScreen(output.str(), 1);
+    else
+        printf("%s\n", output.str().c_str());
+
     if (note != -1 && renderLEDs)
         renderLEDs(note, strength);
 }
@@ -123,18 +125,22 @@ void printNotes(bool notesToPrint[])
         ClrLcd();
     if (recognizedSomething)
     {
-        printf("Notes recognized: \n%s\n", output.str().c_str());
         if (useScreen)
         {
             printToScreen("Notes recognized: ", 1);
             printToScreen(output.str(), 2);
         }
+        else
+        {
+            printf("Notes recognized: \n%s\n", output.str().c_str());
+        }
     }
     else
     {
-        printf("No Notes recognized!\n");
         if (useScreen)
             printToScreen("No Notes recognized!", 1);
+        else
+            printf("No Notes recognized!\n");
     }
 }
 
@@ -448,7 +454,7 @@ int main(int argc, char *argv[])
     double results[resultSize] = {0};
     double filteredResults[resultSize] = {0};
     bool firstRun = true;
-
+    printf("Starting Noteanalyser...\n");
     initializeNoteFrequencies();
     readCorrectionValues();
     // check for flags
@@ -479,7 +485,7 @@ int main(int argc, char *argv[])
         multipleNotes = true;
     else
         printf("Call with \"-M\" to recognize multiple Notes instead of a single one\n");
-
+    fflush(stdout);
     fftw_complex in[numSamples];
     fftw_complex out[numSamples];
     fftw_plan plan = fftw_plan_dft_1d(numSamples, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
@@ -565,7 +571,8 @@ int main(int argc, char *argv[])
         }
 
         highestFrequency = calcHz(highestFrequencyIndex);
-        printf("Frequency peak at: %d\n", highestFrequency);
+        if (!useScreen)
+            printf("Frequency peak at: %d\n", highestFrequency);
         if (useLEDs)
             clearLEDS();
         if (multipleNotes)
@@ -579,7 +586,8 @@ int main(int argc, char *argv[])
             {
 
                 printNote(calculateNote(highestFrequency), filteredResults[highestFrequencyIndex]);
-                printf("With a strength of: %f\n", results[highestFrequencyIndex]);
+                if (!useScreen)
+                    printf("With a strength of: %f\n", results[highestFrequencyIndex]);
             }
             else
                 printNote(-1, -1);
@@ -608,7 +616,7 @@ int main(int argc, char *argv[])
         fill(filteredResults, filteredResults + resultSize, 0);
 
         auto t2 = high_resolution_clock::now();
-        if (DEBUG_MEASURE_TIME)
+        if (DEBUG_MEASURE_TIME && !useScreen)
         {
             duration<double, std::milli> ms_double = t2 - t1;
             printf("Calculated for: %fms\n", ms_double.count());
