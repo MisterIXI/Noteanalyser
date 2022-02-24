@@ -103,3 +103,7 @@ if [ ! -f "/usr/local/include/wiringPi.h" ]; then
     cd ..
 fi
 cd ..
+
+echo "------------------------------------------------------"
+echo "All done now. Now you can simply type 'make' to compile the program."
+echo "Note that you compile the FrequencyCorrection helper with 'make CalculationCorrection'."
