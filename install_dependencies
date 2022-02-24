@@ -9,13 +9,13 @@ if [ ! command -v make &> /dev/null ]; then
     exit 1;
 fi
 
-if [ ! command -v g++ &> /dev/null ]; then
-    echo "Please install g++ first. (e.g. \"sudo apt install g++\")"
+if [ ! command -v cmake &> /dev/null ]; then
+    echo "Please install cmake first. (e.g. \"sudo apt install cmake\")"
     exit 1;
 fi
 
-if [ ! command -v cmake &> /dev/null ]; then
-    echo "Please install cmake first. (e.g. \"sudo apt install cmake\")"
+if [ ! command -v g++ &> /dev/null ]; then
+    echo "Please install g++ first. (e.g. \"sudo apt install g++\")"
     exit 1;
 fi
 
