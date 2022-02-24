@@ -114,27 +114,27 @@ void printNotes(bool notesToPrint[])
         {
             recognizedSomething = true;
             output << noteNames[i % 12].c_str() << i / 12 << " ";
-                   //<< "|" << noteFrequencies[i] << "Hz"
+            //<< "|" << noteFrequencies[i] << "Hz"
             if (useLEDs)
                 renderLEDs(i, noteStrengths[i]);
         }
     }
-    if(useScreen)
+    if (useScreen)
         ClrLcd();
     if (recognizedSomething)
     {
         printf("Notes recognized: \n%s\n", output.str().c_str());
-        if(useScreen)
+        if (useScreen)
         {
-            printToScreen("Notes recognized: ",1);
-            printToScreen(output.str(),2);
+            printToScreen("Notes recognized: ", 1);
+            printToScreen(output.str(), 2);
         }
     }
     else
     {
         printf("No Notes recognized!\n");
-        if(useScreen)
-            printToScreen("No Notes recognized!",1);
+        if (useScreen)
+            printToScreen("No Notes recognized!", 1);
     }
 }
 
@@ -228,6 +228,13 @@ int findPeak(double *array, int findIndex, int arraySize)
     return -1;
 }
 
+/**
+ * @brief Tries to remove the Overtones in the given array. Note that the Values should already filtered to avoid bad removals.
+ * This function searches for the nearest Peak if it isn't at the correct frequency.
+ *
+ * @param array The pre-filtered Resultarray to remove the overtones in
+ * @param startIndex
+ */
 void removeOvertones(double *array, int startIndex)
 {
     int offset = GRAPHING_MIN_FREQ * NUM_SECONDS;
@@ -341,12 +348,24 @@ void filterPeaks(double *toFilter, double *output, int arraySize)
     }
 }
 
+/**
+ * @brief Checks if command options or arguments are set
+ *
+ * @param begin Startpointer of the array (usually argv)
+ * @param end Endpointer of the array (usually argv+argc)
+ * @param option The Option to search for as a string
+ * @return True if the given string was found
+ * @return False if no match was found
+ */
 bool cmdOptionExists(char **begin, char **end, const std::string &option)
 {
     return std::find(begin, end, option) != end;
 }
 
-// Returns correction values from file
+/**
+ * @brief Retrieves the CorrectionValues from the File
+ *
+ */
 void readCorrectionValues()
 {
     ifstream correctionFile("frequencyCorrection");
@@ -362,7 +381,13 @@ void readCorrectionValues()
     }
 }
 
-// Calculates the corrected value, louder values are pitched down, quieter pitched up
+/**
+ * @brief Calculates the corrected value, louder values are pitched down, quieter pitched up
+ *
+ * @param frequency The frequency at what the value occurs
+ * @param value The value to be corrected
+ * @return The corrected value as a double
+ */
 double correctValue(int frequency, double value)
 {
     double shortestDistance = 100.0;
@@ -383,6 +408,30 @@ double correctValue(int frequency, double value)
     return correction * value;
 }
 
+/**
+ * @brief Outputs the given Resultarray into the file with the given filename and calls the given gnuplot to generate the png of the graph.
+ *
+ * @param fileName Name of the plotFile (likely "plotData" or "plotDataFiltered");
+ * @param gnuplotName Name of the gnuplot file (likely "oneTimeGnuPlot" or "oneTimeGnuPlotFiltered")
+ * @param resultArr Pointer to the result array (double[])
+ */
+void printPlotData(string fileName, string gnuplotName, double *resultArr)
+{
+    ofstream plotFile;
+    plotFile.open(fileName);
+    for (int i = 0; i < resultSize; i++)
+    {
+        int currFrequency = calcHz(i);
+        if (currFrequency < GRAPHING_MAX_FREQ)
+        {
+            plotFile << currFrequency << " " << resultArr[i] << "\n";
+        }
+    }
+    plotFile.close();
+    string call = "gnuplot " + gnuplotName;
+    system(call.c_str());
+}
+
 /*******************************************************************/
 int main(int argc, char *argv[])
 {
@@ -399,19 +448,18 @@ int main(int argc, char *argv[])
     double results[resultSize] = {0};
     double filteredResults[resultSize] = {0};
     bool firstRun = true;
-    ofstream plotFile;
-    ofstream plotFileFiltered;
+
     initializeNoteFrequencies();
     readCorrectionValues();
-    if (cmdOptionExists(argv, argv + argc, "-S"))
+    // check for flags
+    if (cmdOptionExists(argv, argv + argc, "-S") || FLAGS_USE_SCREEN)
     {
-        useScreen = 1;
+        useScreen = true;
         init_i2c_screen();
     }
     else
         printf("Call with \"-S\" to use i2cLCD screen\n");
-
-    if (cmdOptionExists(argv, argv + argc, "-L") || (FLAGS_USE_LEDS))
+    if (cmdOptionExists(argv, argv + argc, "-L") || FLAGS_USE_LEDS)
     {
         useLEDs = true;
         ws2811_return_t ret;
@@ -423,6 +471,14 @@ int main(int argc, char *argv[])
     }
     else
         printf("Call with \"-L\" to use LED rendering\n");
+    if (cmdOptionExists(argv, argv + argc, "-G") || FLAGS_GRAPH_OUTPUTS)
+        graphOutputs = true;
+    else
+        printf("Call with \"-G\" to graph outputs to png files\n");
+    if (cmdOptionExists(argv, argv + argc, "-M") || FLAGS_MULTIPLE_NOTES)
+        multipleNotes = true;
+    else
+        printf("Call with \"-M\" to recognize multiple Notes instead of a single one\n");
 
     fftw_complex in[numSamples];
     fftw_complex out[numSamples];
@@ -504,25 +560,8 @@ int main(int argc, char *argv[])
         // output data to plotfiles if flag was set
         if (graphOutputs)
         {
-            plotFile.open("plotData");
-            plotFileFiltered.open("plotDataFiltered");
-            for (i = 0; i < resultSize; i++)
-            {
-                int currFrequency = calcHz(i);
-                // graphOutputs && currFrequency > GRAPHING_MIN_FREQ &&
-                if (currFrequency < GRAPHING_MAX_FREQ)
-                {
-                    plotFile << currFrequency << " " << results[i] << "\n";
-                    plotFileFiltered << currFrequency << " " << filteredResults[i] << "\n";
-                }
-            }
-            plotFile.close();
-            plotFileFiltered.close();
-            if (!firstRun)
-            {
-                system("gnuplot oneTimeGnuPlot");
-                system("gnuplot oneTimeGnuPlotFiltered");
-            }
+            printPlotData("plotData", "oneTimeGnuPlot", results);
+            printPlotData("plotDataFiltered", "oneTimeGnuPlotFiltered", filteredResults);
         }
 
         highestFrequency = calcHz(highestFrequencyIndex);
