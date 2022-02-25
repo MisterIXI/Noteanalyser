@@ -1,0 +1,7 @@
+#!/bin/bash
+# this script is not intended for manual use, this is for autostart functionality (check readme)
+cd /home/pi/Noteanalyser
+echo "sleeping..."
+sleep 20
+echo "finished sleeping!"
+./NoteAnalyser.out
