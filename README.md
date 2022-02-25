@@ -29,8 +29,8 @@ To compile the program you now only need to type ```make``` in the parent direct
 
 # Usage
 The Programm features 4 Flags:
-- "-S": activates the Screen
-- "-L": uses LEDs to output results
+- "-S": activates the Screen (requires the program to be run as root)
+- "-L": uses LEDs to output results (requires the program to be run as root)
 - "-G": outputs the results to files and uses gnuplot to graph them into .png
 - "-M": Recognize multiple Notes instead of a single one  
   
@@ -38,7 +38,7 @@ You can set the defaults of these flags at the top of the "AnalyserDefinitions.h
 
 # Hardware assembly  
 You can find the main assembly instructions [here on prusaprinters.com](https://www.prusaprinters.org/prints/139324-noteanalyser).  
-In Short: The whole project was designed with 3M threaded heatinsterts in mind together with 3Mx6 screws. You can use longer screws everywhere except for the LCD screws and the LEDHolder part.
+In Short: The whole project was designed with M3 threaded heatinsterts in mind together with M3x6 screws. You can use longer screws everywhere except for the LCD screws and the LEDHolder part.
 
 # How it works
 Here an example of E4, G4 and B4(/H4) being pressed at the same time. With a too much noise.
