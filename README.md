@@ -5,7 +5,7 @@ This is a university project for "MUME" under Maximilian Mengel.
 [Click here](https://misterixi.github.io/NoteanalyserPreview/) for a rendered Preview of the 3D Model. Alternatively you can visit the [Fusion 360 shared Link](https://a360.co/3uYjknz) to get a manual view of the model file. :)
 
 # Compatibility
-This program was designed and testet on a Raspberry Pi 4 (8GB) with Raspbian Lite.
+This program was designed and tested on a Raspberry Pi 4 (8GB) with Raspbian Lite.
 You can probably run this on other Systems, but keep in mind that if you enable the LED or LCD option the program will not run if you are not on an Raspi or don't have an i2c LCD connected.
 
 # Installation
