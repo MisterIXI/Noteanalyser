@@ -2,7 +2,9 @@
 This program takes live input from the default microphone, and performs a frequency analysis to recognize the played note on a piano. (Or a direct generated sine wave)
 This is a university project for "MUME" under Maximilian Mengel.
 
-[Click here](https://misterixi.github.io/NoteanalyserPreview/) for a rendered Preview of the 3D Model. Alternatively you can visit the [Fusion 360 shared Link](https://a360.co/3uYjknz) to get a manual view of the model file. :)
+[Click here](https://misterixi.github.io/NoteanalyserPreview/) for a rendered Preview of the 3D Model. Alternatively you can visit the [Fusion 360 shared Link](https://a360.co/3uYjknz) to get a manual view of the model file. :)  
+Pictures and building instructions are found [here on prusaprinters.com](https://www.prusaprinters.org/prints/139324-noteanalyser)  
+And a short Demo is uploaded here on Youtube: https://youtu.be/D2MXBKhizrM
 
 # Compatibility
 This program was designed and tested on a Raspberry Pi 4 (8GB) with Raspbian Lite.
