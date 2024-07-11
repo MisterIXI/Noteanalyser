@@ -6,6 +6,7 @@ This is a university project for "MUME" under Maximilian Mengel.
 Pictures and building instructions are found [here on prusaprinters.com](https://www.prusaprinters.org/prints/139324-noteanalyser)  
 And a short Demo is uploaded here on Youtube: https://youtu.be/D2MXBKhizrM
 
+![Noteanalyser](./pics/Analyser_pic.webp)
 # Compatibility
 This program was designed and tested on a Raspberry Pi 4 (8GB) with Raspbian Lite.
 You can probably run this on other Systems, but keep in mind that if you enable the LED or LCD option the program will not run if you are not on an Raspi or don't have an i2c LCD connected.
